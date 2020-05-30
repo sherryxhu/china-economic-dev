@@ -1,0 +1,100 @@
+---
+title: "China class code"
+author: "Sherry Hu"
+date: "5/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+require(haven)
+sashhinc=read_sas("hhinc_10.sas7bdat")
+View(sashhinc)
+```
+
+```{r}
+# negative incomes reflect capital investments or the like
+summary(sashhinc$HHINC[sashhinc$WAVE==2015])
+summary(sashhinc$HHFARM[sashhinc$WAVE==2015])
+summary(sashhinc$HHBUS[sashhinc$WAVE==2015])
+summary(sashhinc$HHFISH[sashhinc$WAVE==2015])
+```
+
+```{r}
+library(tidyverse)
+library(mice)
+library(reshape2)
+library(ggplot2)
+library(lme4)
+```
+
+```{r}
+sashhinc=select(sashhinc,hhid,WAVE,hhinc_cpi)
+
+head(sashhinc)
+#hhid: first 2 numbers denote province or megacity (21=Liaoning)
+#t1  : first two numbers of hhid (so province identifier)
+###### next number 1=urban, 2=rural (official designation)
+###### 4th number is a one digit city or county ID
+###### 5th and 6th numbers are 2-digit neighborhood or village ID
+###### last 3 numbers indicate the household (within neighborhood within city etc)
+
+tail(sashhinc)
+```
+
+```{r}
+# change from long to wide format for purposes of getting some descriptive stats
+wide=dcast(melt(sashhinc,id.vars=c("hhid","WAVE")),hhid~variable+WAVE)
+
+head(wide)
+colSums(!is.na(wide)) #see how many observed values per year
+apply(wide[2:11],2,mean,na.rm=TRUE)
+```
+
+```{r}
+# fit a simple random intercept model for linear time trend
+m1=lmer(hhinc_cpi~WAVE+ (1|hhid),data=sashhinc)
+```
+
+```{r}
+# let's make this more interpretable by letting 1989 be year 0
+# also let's convert income to thousands of yuan
+sashhinc$cyear=sashhinc$WAVE-1989
+sashhinc$thousands=sashhinc$hhinc_cpi/1000
+
+#using "centered" year and scaled income
+m2=lmer(thousands~cyear+ (1|hhid),data=sashhinc)
+```
+
+```{r}
+# what changed in significance in m2 vs m1? Is that sensible?
+
+
+#picking off intercept and slope of line from m2
+est=data.frame(sl = fixef(m2)[2], 
+               int = fixef(m2)[1])
+
+#one simple plot, limiting range so you can see action
+#I was lazy; you'll want the x-axis to have years on it
+ggplot(sashhinc, aes(x=cyear,y=thousands,group=hhid)) +
+  ylim(-500,1500) + 
+  geom_point(alpha=0.05) + geom_line(alpha=0.1) +
+  geom_abline(data=est, aes(intercept=int, slope=sl),col="red") +
+  xlab("Years Since 1989") + ylab("Income (thousands of yuan)") + 
+  ggtitle("CHNS Household Income by Year")
+
+## eew, you'll have to deal with these!
+library(lattice)
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+
+## how would we adapt our model to allow different time trends by province?
+
+
+
+
+```
+

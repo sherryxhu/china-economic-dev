@@ -1,0 +1,17 @@
+---
+title: "chinacode"
+author: "Sherry Hu"
+date: "5/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# read in data
+require(haven)
+sashhinc=read_sas("hhinc_10.sas7bdat")
+```
+
