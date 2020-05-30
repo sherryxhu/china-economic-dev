@@ -10,8 +10,174 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+library(tidyverse)
+library(mice)
+library(reshape2)
+library(ggplot2)
+library(lme4)
 # read in data
 require(haven)
 sashhinc=read_sas("hhinc_10.sas7bdat")
+
 ```
 
+```{r}
+sashhinc[is.na(sashhinc)] = 0
+df = select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban)
+
+names(df)<- toupper(names(df))
+df$T1 = as.factor(df$T1)
+head(df)
+```
+
+# exploring log transform / outlier removal
+
+## log shift without outlier removal
+```{r}
+colnames(sashhinc)
+summary(sashhinc)
+```
+
+```{r}
+sashhinc$cyear=sashhinc$WAVE-1989
+sashhinc$thousands=sashhinc$hhinc_cpi/1000
+
+hist(sashhinc$thousands)
+```
+
+```{r}
+sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+hist(log(sashhinc$thousands_shifted))
+```
+
+```{r}
+pairs(log(thousands_shifted)~cyear + urban + t1, data=sashhinc)
+```
+
+```{r}
+
+m2=lmer(log(thousands_shifted) ~ cyear + urban + t1 + 
+          cyear*urban + cyear*t1 + urban*t1 
+        + cyear*urban*t1 + (1|hhid),data=sashhinc, REML=FALSE)
+summary(m2)
+```
+
+```{r}
+# ggplot(sashhinc, aes(x=cyear,y=thousands,group=hhid)) +
+#   ylim(-500,1500) + 
+#   geom_point(alpha=0.05) + geom_line(alpha=0.1) +
+#   geom_abline(data=est, aes(intercept=int, slope=sl),col="red") +
+#   xlab("Years Since 1989") + ylab("Income (thousands of yuan)") + 
+#   ggtitle("CHNS Household Income by Year")
+
+```
+
+
+
+```{r}
+library(lattice)
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+
+```
+
+## .1% removed
+```{r}
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+dim(sashhinc)[1] - dim(sashhinc_trimmed)[1]
+```
+
+```{r}
+m2=lmer((thousands) ~ cyear + urban + t1 + 
+          cyear*urban + cyear*t1 + urban*t1 
+        + cyear*urban*t1 + (1|hhid),data=sashhinc_trimmed, REML=FALSE)
+summary(m2)
+```
+
+
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+
+```
+
+
+
+```{r}
+sashhinc_trimmed$thousands_shifted = sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
+m2=lmer(log(thousands_shifted) ~ cyear + urban + t1 + 
+          cyear*urban + cyear*t1 + urban*t1 
+        + cyear*urban*t1 + (1|hhid),data=sashhinc_trimmed, REML=FALSE)
+summary(m2)
+```
+
+
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
+
+## .05% removed
+
+```{r}
+lower = quantile(sashhinc$thousands, 0.005)
+upper = quantile(sashhinc$thousands, 0.995)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+dim(sashhinc)[1] - dim(sashhinc_trimmed)[1]
+```
+
+```{r}
+m2=lmer((thousands) ~ cyear + urban + t1 + 
+          cyear*urban + cyear*t1 + urban*t1 
+        + cyear*urban*t1 + (1|hhid),data=sashhinc_trimmed, REML=FALSE)
+summary(m2)
+```
+
+
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+
+```
+
+
+
+```{r}
+sashhinc_trimmed$thousands_shifted = sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
+m2=lmer(log(thousands_shifted) ~ cyear + urban + t1 + 
+          cyear*urban + cyear*t1 + urban*t1 
+        + cyear*urban*t1 + (1|hhid),data=sashhinc_trimmed)
+summary(m2)
+```
+
+
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```

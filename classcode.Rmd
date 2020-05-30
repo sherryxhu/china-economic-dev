@@ -66,6 +66,9 @@ sashhinc$cyear=sashhinc$WAVE-1989
 sashhinc$thousands=sashhinc$hhinc_cpi/1000
 
 #using "centered" year and scaled income
+
+# 1 indicates only intercepts to be random, variable after | is the clustered variable (what the different groups are for the random effects)
+# REML = FALSE, means you ask for maximum likelihood estimates
 m2=lmer(thousands~cyear+ (1|hhid),data=sashhinc)
 ```
 
