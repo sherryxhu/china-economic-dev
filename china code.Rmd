@@ -17,15 +17,37 @@ library(ggplot2)
 library(lme4)
 library(lattice)
 library(caret)
+library(monomvn)
+
 # read in data
 require(haven)
 sashhinc=read_sas("hhinc_10.sas7bdat")
 
+# let's make this more interpretable by letting 1989 be year 0
+# also let's convert income to thousands of yuan
+sashhinc$cyear=sashhinc$WAVE-1989
+sashhinc$thousands=sashhinc$hhinc_cpi/1000
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
+# log transform
+sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+```
+
+```{r}
+# take a peek at dataset
+colnames(sashhinc)
+summary(sashhinc)
 ```
 
 ```{r}
 sashhinc[is.na(sashhinc)] = 0
-df = select(sashhinc,
+
+# select variables we need for df
+df = dplyr::select(sashhinc,
             hhid,
             WAVE,
             hhinc_cpi, 
@@ -49,60 +71,182 @@ df = select(sashhinc,
             HHSUB,
             HHSUBimp,
             t1,
-            urban)
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
+
+# select variables we need for df w/o outliers
+df_trimmed = dplyr::select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
 
 names(df)<- toupper(names(df))
 df$T1 = as.factor(df$T1)
+
+names(df_trimmed)<- toupper(names(df_trimmed))
+df_trimmed$T1 = as.factor(df_trimmed$T1)
+
 head(df)
+head(df_trimmed)
 ```
 
-# exploring log transform / outlier removal
-
-## log shift without outlier removal
+# Train/Test Split (for now)
 ```{r}
-colnames(sashhinc)
-summary(sashhinc)
+library(ISLR)
+n1 = floor(0.8*nrow(df))  # creates a value for dividing the data into train and test
+
+set.seed(123)   # set seed to ensure you always have same random numbers generated
+train_ind = sample(seq_len(nrow(df)),size = n1)  # Randomly identifies the rows equal to sample size ( defined in previous instruction) from  all the rows of df dataset and stores the row number in train_ind
+df_train = df[train_ind,] #creates the training dataset with row numbers stored in train_ind
+df_test= df[-train_ind,]  # creates the test dataset excluding the row numbers mentioned in train_ind
+
+# do the same with df_trimmed
+n2 = floor(0.8*nrow(df_trimmed))  # creates a value for dividing the data into train and test
+set.seed(123)   # set seed to ensure you always have same random numbers generated
+train_ind = sample(seq_len(nrow(df_trimmed)),size = n2)  # Randomly identifies the rows equal to sample size
+df_trimmed_train = df[train_ind,] #creates the training dataset with row numbers stored in train_ind
+df_trimmed_test= df[-train_ind,]  # creates the test dataset excluding the row numbers mentioned in train_ind
 ```
 
-
-```{r}
-df$cyear=df$WAVE-1989
-df$thousands=df$HHINC_CPI/1000
-
-m2=lmer(thousands ~ cyear + URBAN + T1 + 
-          cyear*URBAN + cyear*T1 + URBAN*T1
-        + cyear*URBAN*T1 + (1|HHID), data=df)
-summary(m2)
-anova(m2)
-
-```
-
-```{r}
-library(lattice)
-qqmath(resid(m2))
-plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
-```
-
+# Model w/ outliers 
 ```{r}
 colnames(df)
+``` 
+
+```{r}
+# fit model with all interactions
+m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
+        + (1 + CYEAR|HHID), data=df)
+summary(m1)
+anova(m1)
 ```
 
 ```{r}
-df$cyear=df$WAVE-1989
-df$thousands=df$HHINC_CPI/1000
+qqmath(resid(m1))
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
 
-m2=lmer(HHINC_CPI ~  HHBUS + HHFARM + HHFISH + HHGARD + HHLVST + HHNRWAGE + HHOTHR  + HHRETIRE + HHSUB + 
-          (1|HHID), data=df)
+# Model selection- m1 (outliers included)
+```{r}
+extract_b <- function(m) c(mean(m$mu), colMeans(m$beta)) # Bayes estimators (posterior mean)
+
+# Note: we are using the whole dataset for now, not the train-test split 
+df_X = df %>% dplyr::select(CYEAR, HHID, T1, URBAN)
+df_Y = df %>% pull(THOUSANDS_SHIFTED)
+m1 <- bhs(df_X, df_Y)
+b_hat_hs <- extract_b(m1)
+# Y_hat_hs <- my_predict(b_hat_hs, X = X_test)
+```
+
+# Model w/o Outliers
+```{r}
+# fit model with all interactions
+m2=lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
+        + (1 + CYEAR|HHID), data=df_trimmed)
 summary(m2)
 anova(m2)
-
 ```
+
+# Model selection using horseshoe prior (m2- w/0 outliers)
 ```{r}
+# Note: we are using the whole dataset for now, not the train-test split 
+df_trim_X = df_trimmed %>% dplyr::select(CYEAR, HHID, T1, URBAN)
+df_trim_Y = df_trimmed %>% pull(THOUSANDS_SHIFTED)
+m2 <- bhs(df_trim_X, df_trim_Y)
+b_hat_hs_trim <- extract_b(m2)
+# Y_hat_hs <- my_predict(b_hat_hs, X = X_test)
+```
+
+```{r}
+print(b_hat_hs)
+print(b_hat_hs_trim)
+```
+
+# Alternative way of splitting train-test
+# this code is broken rn 
+```{r}
+# w/ outliers
+df_1989 = subset(df, WAVE==1989)
+length(unique(df_1989$HHID))
+df_1989 = df_1989[order(df_1989$HHINC_CPI),]
+
+i=1
+test_indices = seq(i, nrow(df_1989), n_folds = 5)
+train_fold_HHIDs = df_1989[-test_indices,]$HHID
+test_fold_HHIDs = df_1989[test_indices,]$HHID
+  
+df_train = df[df$HHID %in% train_fold_HHIDs,]
+df_test = df[df$HHID %in% test_fold_HHIDs,]
+
+# w/o outliers
+df_1989_trim = subset(df_trimmed, WAVE==1989)
+length(unique(df_1989_trim$HHID))
+df_1989_trim = df_1989_trim[order(df_1989_trim$HHINC_CPI),]
+
+i=1
+test_indices = seq(i, nrow(df_1989_trim), n_folds = 5)
+train_fold_HHIDs = df_1989_trim[-test_indices,]$HHID
+test_fold_HHIDs = df_1989_trim[test_indices,]$HHID
+  
+df_train_trim = df_trimmed[df_trimmed$HHID %in% train_fold_HHIDs,]
+df_test_trim = df_trimmed[df_trimmed$HHID %in% test_fold_HHIDs,]
+
+# model selection using hopefully representative train-test
+df_X = df_train %>% dplyr::select(CYEAR, HHID, T1, URBAN)
+df_Y = df_train %>% pull(THOUSANDS_SHIFTED)
+m1 <- bhs(df_X, df_Y)
+b_hat_hs <- extract_b(m1)
+
+df_trim_X = df_train_trim %>% dplyr::select(CYEAR, HHID, T1, URBAN)
+df_trim_Y = df_ttrain_trim %>% pull(THOUSANDS_SHIFTED)
+m2 <- bhs(df_trim_X, df_trim_Y)
+b_hat_hs_trim <- extract_b(m2)
+
+print(b_hat_hs)
+print(b_hat_hs_trim)
+```
+
+
+# Residual plots post var. selection
+```{r}
+qqmath(resid(m1))
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0)
+
 qqmath(resid(m2))
 plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
 ```
 
+# other stuff 
 
+<<<<<<< HEAD
 # stratified cross validation
 
 ```{r}
@@ -143,25 +287,32 @@ for(i in 1:n_folds){
   MSEs = c(MSEs, MSE)
 }
 ```
+=======
+```{r}
+df$cyear=df$WAVE-1989
+df$thousands=df$HHINC_CPI/1000
+
+m2=lmer(HHINC_CPI ~  HHBUS + HHFARM + HHFISH + HHGARD + HHLVST + HHNRWAGE + HHOTHR  + HHRETIRE + HHSUB + 
+          (1|HHID), data=df)
+summary(m2)
+anova(m2)
+>>>>>>> 62d99a6b6396e6ac5ef28d3707f8d6b0f5abfc23
 
 ```{r}
 mean(MSEs)
 ```
 
+<<<<<<< HEAD
 
 # old stuff
 
 ```{r}
 sashhinc$cyear=sashhinc$WAVE-1989
 sashhinc$thousands=sashhinc$hhinc_cpi/1000
+=======
+>>>>>>> 62d99a6b6396e6ac5ef28d3707f8d6b0f5abfc23
 
-hist(sashhinc$thousands)
-```
-
-```{r}
-sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
-hist(log(sashhinc$thousands_shifted))
-```
+# old stuff
 
 ```{r}
 pairs(log(thousands_shifted)~cyear + urban + t1, data=sashhinc)
@@ -185,14 +336,6 @@ summary(m2)
 
 ```
 
-
-
-```{r}
-library(lattice)
-qqmath(resid(m2))
-plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
-
-```
 
 ## .1% removed
 ```{r}
