@@ -16,7 +16,7 @@ library(reshape2)
 library(ggplot2)
 library(lme4)
 library(lattice)
-
+library(caret)
 # read in data
 require(haven)
 sashhinc=read_sas("hhinc_10.sas7bdat")
@@ -103,10 +103,51 @@ plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
 ```
 
 
+# stratified cross validation
+
 ```{r}
+# get all HHIDs from 1989, sorted by HHINC_CPI
+df_1989 = subset(df, WAVE==1989)
+length(unique(df_1989$HHID))
+df_1989 = df_1989[order(df_1989$HHINC_CPI),]
 
 
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+# check if there are any HHID's in 2015 that didn't respond in 1989
+sum(unique(subset(df, WAVE=2015)$HHID) %!in% unique(subset(df, WAVE=1989)$HHID))
+# check if there are any HHID's in 1989 that weren't in 2015
+sum(unique(subset(df, WAVE=1989)$HHID) %!in% unique(subset(df, WAVE=2015)$HHID))
+
+
+n_folds = 10
+MSEs = c()
+for(i in 1:n_folds){
+  # split into train and test folds
+  test_indices = seq(i, nrow(df_1989), n_folds)
+  train_fold_HHIDs = df_1989[-test_indices,]$HHID
+  test_fold_HHIDs = df_1989[test_indices,]$HHID
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer(HHINC_CPI ~  cyear + URBAN + T1 + 
+          cyear*URBAN + cyear*T1 + URBAN*T1
+        + cyear*URBAN*T1 +
+          (1|HHID), data=train_fold)
+  
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$HHINC_CPI)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
 ```
+
+```{r}
+mean(MSEs)
+```
+
 
 # old stuff
 
