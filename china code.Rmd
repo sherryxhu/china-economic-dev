@@ -15,6 +15,8 @@ library(mice)
 library(reshape2)
 library(ggplot2)
 library(lme4)
+library(lattice)
+
 # read in data
 require(haven)
 sashhinc=read_sas("hhinc_10.sas7bdat")
@@ -61,6 +63,52 @@ head(df)
 colnames(sashhinc)
 summary(sashhinc)
 ```
+
+
+```{r}
+df$cyear=df$WAVE-1989
+df$thousands=df$HHINC_CPI/1000
+
+m2=lmer(thousands ~ cyear + URBAN + T1 + 
+          cyear*URBAN + cyear*T1 + URBAN*T1
+        + cyear*URBAN*T1 + (1|HHID), data=df)
+summary(m2)
+anova(m2)
+
+```
+
+```{r}
+library(lattice)
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
+
+```{r}
+colnames(df)
+```
+
+```{r}
+df$cyear=df$WAVE-1989
+df$thousands=df$HHINC_CPI/1000
+
+m2=lmer(HHINC_CPI ~  HHBUS + HHFARM + HHFISH + HHGARD + HHLVST + HHNRWAGE + HHOTHR  + HHRETIRE + HHSUB + 
+          (1|HHID), data=df)
+summary(m2)
+anova(m2)
+
+```
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
+
+
+```{r}
+
+
+```
+
+# old stuff
 
 ```{r}
 sashhinc$cyear=sashhinc$WAVE-1989
