@@ -288,24 +288,6 @@ ggplot(ratio.years.primary,aes(x = WAVE,y = ratio)) +
   theme(plot.title = element_text(hjust = 0.5))+
   facet_wrap(~PRIMARY)
 ```
-```
-# Train/Test Split (for now)
-```{r}
-library(ISLR)
-n1 = floor(0.8*nrow(df))  # creates a value for dividing the data into train and test
-
-set.seed(123)   # set seed to ensure you always have same random numbers generated
-train_ind = sample(seq_len(nrow(df)),size = n1)  # Randomly identifies the rows equal to sample size ( defined in previous instruction) from  all the rows of df dataset and stores the row number in train_ind
-df_train = df[train_ind,] #creates the training dataset with row numbers stored in train_ind
-df_test= df[-train_ind,]  # creates the test dataset excluding the row numbers mentioned in train_ind
-
-# do the same with df_trimmed
-n2 = floor(0.8*nrow(df_trimmed))  # creates a value for dividing the data into train and test
-set.seed(123)   # set seed to ensure you always have same random numbers generated
-train_ind = sample(seq_len(nrow(df_trimmed)),size = n2)  # Randomly identifies the rows equal to sample size
-df_trimmed_train = df[train_ind,] #creates the training dataset with row numbers stored in train_ind
-df_trimmed_test= df[-train_ind,]  # creates the test dataset excluding the row numbers mentioned in train_ind
-```
 
 # Model w/ outliers 
 ```{r}
