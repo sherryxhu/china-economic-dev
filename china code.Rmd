@@ -191,7 +191,104 @@ ggplot(gini.years.province,aes(x = WAVE,y = index,group = city,color = city)) +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
+```{r ineq3}
+gini.years.primary = df %>%
+  select(HHID,HHINCPC_CPI,T1,WAVE,city,PRIMARY) %>%
+  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
+  group_by(PRIMARY,WAVE) %>%
+  summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
 
+ggplot(gini.years.primary,aes(x = WAVE,y = index,group = PRIMARY,color = PRIMARY)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Gini Index Over Year by Province") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(gini.years.primary,aes(x = WAVE,y = index)) +
+  geom_line() +
+  geom_point()+
+  #geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(~PRIMARY)
+```
+
+```{r ratio1}
+ratio.years = df %>%
+  select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  group_by(WAVE) %>%
+  mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
+        bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
+  summarise(ratio = sum(bottom10)/sum(top10),sumb = sum(bottom10),sumt =sum(top10))
+
+ggplot(ratio.years,aes(x = WAVE,y = ratio)) +
+  geom_line() +
+  geom_point()+
+  geom_text(aes(label = round(ratio, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r ratio2}
+ratio.years.province = df %>%
+  select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  group_by(WAVE,city) %>%
+  mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
+        bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
+  summarise(ratio = sum(bottom10)/sum(top10),sumb = sum(bottom10),sumt =sum(top10))
+
+ggplot(ratio.years.province,aes(x = WAVE,y = ratio,group = city,color = city)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Gini Index Over Year by Province") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ratio.years.province,aes(x = WAVE,y = ratio)) +
+  geom_line() +
+  geom_point()+
+  #geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(~city)
+```
+
+```{r ratio3}
+ratio.years.primary = df %>%
+  select(HHID,HHINCPC_CPI,WAVE,PRIMARY) %>%
+  group_by(WAVE,PRIMARY) %>%
+  mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
+        bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
+  summarise(ratio = sum(bottom10)/sum(top10),sumb = sum(bottom10),sumt =sum(top10))
+
+ggplot(ratio.years.primary,aes(x = WAVE,y = ratio,group = PRIMARY,color = PRIMARY)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Gini Index Over Year by Province") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ratio.years.primary,aes(x = WAVE,y = ratio)) +
+  geom_line() +
+  geom_point()+
+  #geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(~PRIMARY)
+```
+```
 # Train/Test Split (for now)
 ```{r}
 library(ISLR)
