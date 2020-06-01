@@ -84,7 +84,7 @@ df = dplyr::select(sashhinc,
 
 #add primary income source variable
 df <- df %>% 
-        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
+        mutate(PRIMARY= colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
 # select variables we need for df w/o outliers
 df_trimmed = dplyr::select(sashhinc,
@@ -126,24 +126,6 @@ head(df)
 head(df_trimmed)
 ```
 
-# Train/Test Split (for now)
-```{r}
-library(ISLR)
-n1 = floor(0.8*nrow(df))  # creates a value for dividing the data into train and test
-
-set.seed(123)   # set seed to ensure you always have same random numbers generated
-train_ind = sample(seq_len(nrow(df)),size = n1)  # Randomly identifies the rows equal to sample size ( defined in previous instruction) from  all the rows of df dataset and stores the row number in train_ind
-df_train = df[train_ind,] #creates the training dataset with row numbers stored in train_ind
-df_test= df[-train_ind,]  # creates the test dataset excluding the row numbers mentioned in train_ind
-
-# do the same with df_trimmed
-n2 = floor(0.8*nrow(df_trimmed))  # creates a value for dividing the data into train and test
-set.seed(123)   # set seed to ensure you always have same random numbers generated
-train_ind = sample(seq_len(nrow(df_trimmed)),size = n2)  # Randomly identifies the rows equal to sample size
-df_trimmed_train = df[train_ind,] #creates the training dataset with row numbers stored in train_ind
-df_trimmed_test= df[-train_ind,]  # creates the test dataset excluding the row numbers mentioned in train_ind
-```
-
 # Model w/ outliers 
 ```{r}
 colnames(df)
@@ -151,8 +133,8 @@ colnames(df)
 
 ```{r}
 # fit model with all interactions
-m1 = lmer(log(thousands_shifted) ~ CYEAR + URBAN + T1 + 
-          CYEAR*URBAN 
+m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR 
           + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
         + (1 + CYEAR|HHID), data=df)
 summary(m1)
@@ -175,6 +157,12 @@ bms(df)
 extract_b <- function(m) c(mean(m$mu), colMeans(m$beta)) # Bayes estimators (posterior mean)
 
 df$urban_year_interaction = df$URBAN * df$CYEAR
+
+m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR 
+          + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
+        + (1 + CYEAR|HHID), data=df)
+
 # df$urban_year_interaction_2 = df$URBAN_2 * df$CYEAR
 
 # indicator for provinces , random effects for intercept 
@@ -186,7 +174,7 @@ df$urban_year_interaction = df$URBAN * df$CYEAR
 
 df$HHID = as.factor(df$HHID)
 # Note: we are using the whole dataset for now, not the train-test split 
-df_X = df %>% dplyr::select(CYEAR, HHID, T1, URBAN, Z*b_i)
+df_X = df %>% dplyr::select(CYEAR, HHID, T1, URBAN)
 df_Y = df %>% pull(THOUSANDS_SHIFTED)
 m1 <- bhs(df_X, df_Y)
 b_hat_hs <- extract_b(m1)
@@ -252,6 +240,7 @@ MSEs = c()
 for(i in 1:n_times){
   set.seed(i)
   
+  HHIDs = sample(HHIDs)
   # split into train and test folds
   test_indices = seq(i, length(HHIDs), test_size)
   train_fold_HHIDs = HHIDs[-test_indices]
