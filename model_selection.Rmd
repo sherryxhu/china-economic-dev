@@ -1,0 +1,505 @@
+---
+title: "model_selection"
+author: "Daniel Zhou"
+date: "6/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(mice)
+library(reshape2)
+library(ggplot2)
+library(lme4)
+library(lattice)
+library(caret)
+library(monomvn)
+
+# read in data
+require(haven)
+sashhinc=read_sas("hhinc_10.sas7bdat")
+
+# let's make this more interpretable by letting 1989 be year 0
+# also let's convert income to thousands of yuan
+sashhinc$cyear=sashhinc$WAVE-1989
+sashhinc$thousands=sashhinc$hhincpc_cpi/1000
+
+# replace NAs w/ null
+sashhinc[is.na(sashhinc)] = 0
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
+# log transform
+sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+
+# change to categorical variables
+sashhinc$urban <- as.factor(sashhinc$urban)
+sashhinc$hhid <- as.factor(sashhinc$hhid)
+sashhinc$t1 <- as.factor(sashhinc$t1)
+```
+
+
+```{r}
+# select variables we need for df
+df = dplyr::select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
+
+#add primary income source variable
+df <- df %>% 
+        mutate(PRIMARY= colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
+
+# select variables we need for df w/o outliers
+df_trimmed = dplyr::select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
+
+names(df)<- toupper(names(df))
+df$T1 = as.factor(df$T1)
+
+names(df_trimmed)<- toupper(names(df_trimmed))
+df_trimmed$T1 = as.factor(df_trimmed$T1)
+
+head(df)
+head(df_trimmed)
+```
+
+
+## primary is significant
+```{r}
+# no PRIMARY
+m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 + CYEAR|HHID), data=df, REML=FALSE)
+
+# PRIMARY
+m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +(1 + CYEAR|HHID), data=df, REML=FALSE)
+
+anova(m1, m2)
+```
+
+# 2 way interactions
+```{r}
+variables_of_interest = c("CYEAR * URBAN", 
+                          "CYEAR * T1", 
+                          "CYEAR * PRIMARY", 
+                          "URBAN * T1", 
+                          "URBAN * PRIMARY", 
+                          "T1 * PRIMARY")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("CYEAR",
+                      "URBAN",
+                      "T1",
+                      "PRIMARY",
+                      "(1 + CYEAR|HHID)")
+current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  # perform anova on baseline and a new model, record the resulting p-value
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+
+```{r}
+current_variables
+```
+
+# 3 way interaction
+
+```{r} 
+
+# CYEAR, URBAN, T1, PRIMARY
+variables_of_interest = c("CYEAR * URBAN * T1", 
+                          "CYEAR * URBAN * PRIMARY",
+                          "CYEAR * T1 * PRIMARY", 
+                          "URBAN * CYEAR * PRIMARY")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("CYEAR",
+                      "URBAN",
+                      "T1",
+                      "PRIMARY",
+                      "(1 + CYEAR|HHID)",
+                      "CYEAR * PRIMARY", 
+                      "CYEAR * T1", 
+                      "CYEAR * URBAN",
+                      "T1 * PRIMARY", 
+                      "URBAN * T1")
+current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+## CYEAR * URBAN * T1 * PRIMARY is significant
+```{r}
+# no PRIMARY
+m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 + CYEAR|HHID)
+          + CYEAR * PRIMARY 
+          + CYEAR * T1
+          + CYEAR * URBAN
+          + T1 * PRIMARY 
+          + URBAN * T1 
+          + CYEAR * T1 * PRIMARY 
+          + CYEAR * URBAN * T1, data=df, REML=FALSE)
+
+# PRIMARY
+m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 + CYEAR|HHID)
+          + CYEAR * PRIMARY 
+          + CYEAR * T1
+          + CYEAR * URBAN
+          + T1 * PRIMARY 
+          + URBAN * T1 
+          + CYEAR * T1 * PRIMARY 
+          + CYEAR * URBAN * T1
+          + CYEAR * URBAN * T1 * PRIMARY, data=df, REML=FALSE)
+anova(m1, m2)
+```
+
+# Cross validation
+
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 + CYEAR|HHID)
+          + CYEAR * PRIMARY 
+          + CYEAR * T1
+          + CYEAR * URBAN
+          + T1 * PRIMARY 
+          + URBAN * T1 
+          + CYEAR * T1 * PRIMARY 
+          + CYEAR * URBAN * T1
+          + CYEAR * URBAN * T1 * PRIMARY, data=train_fold, REML=FALSE)
+  
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = exp(predictions) - (test_fold$THOUSANDS_SHIFTED)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
+
+```
+# archived
+
+
+<!-- ## CYEAR * PRIMARY is next most significant -->
+<!-- ```{r} -->
+
+<!-- # baseline -->
+<!-- m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +(1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # CYEAR * URBAN -->
+<!-- m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR*URBAN + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # CYEAR * T1 -->
+<!-- m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR*T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # CYEAR * PRIMARY -->
+<!-- m4 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * T1 -->
+<!-- m5 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + URBAN * T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * PRIMARY -->
+<!-- m6 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + URBAN * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # T1 * PRIMARY -->
+<!-- m7 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + T1 * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- model_names = c("CYEAR * URBAN", "CYEAR * T1", "CYEAR * PRIMARY", "URBAN * T1", "URBAN * PRIMARY", "T1 * PRIMARY") -->
+<!-- models = c(m2, m3, m4, m5, m6, m7) -->
+<!-- p_vals = c() -->
+<!-- for (m in models){ -->
+<!--   anova_result = anova(m1, m) -->
+<!--   p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2]) -->
+<!-- } -->
+<!-- p_vals -->
+<!-- model_names[which.min(p_vals)] -->
+<!-- ``` -->
+
+<!-- ## CYEAR * T1 is next most significant -->
+<!-- ```{r} -->
+
+<!-- # baseline -->
+<!-- m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # CYEAR * URBAN -->
+<!-- m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*URBAN + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # CYEAR * T1 -->
+<!-- m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * T1 -->
+<!-- m4 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + URBAN * T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * PRIMARY -->
+<!-- m5 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + URBAN * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # T1 * PRIMARY -->
+<!-- m6 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + T1 * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- model_names = c("CYEAR * URBAN", "CYEAR * T1", "URBAN * T1", "URBAN * PRIMARY", "T1 * PRIMARY") -->
+<!-- models = c(m2, m3, m4, m5, m6) -->
+<!-- p_vals = c() -->
+<!-- for (m in models){ -->
+<!--   anova_result = anova(m1, m) -->
+<!--   p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2]) -->
+<!-- } -->
+<!-- p_vals -->
+<!-- model_names[which.min(p_vals)] -->
+<!-- ``` -->
+
+
+
+<!-- ## CYEAR * URBAN is next most significant -->
+<!-- ```{r} -->
+
+<!-- # baseline -->
+<!-- m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR * PRIMARY + CYEAR*T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # CYEAR * URBAN -->
+<!-- m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * T1 -->
+<!-- m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + URBAN * T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * PRIMARY -->
+<!-- m4 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + URBAN * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # T1 * PRIMARY -->
+<!-- m5 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + T1 * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- model_names = c("CYEAR * URBAN", "URBAN * T1", "URBAN * PRIMARY", "T1 * PRIMARY") -->
+<!-- models = c(m2, m3, m4, m5) -->
+<!-- p_vals = c() -->
+<!-- for (m in models){ -->
+<!--   anova_result = anova(m1, m) -->
+<!--   p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2]) -->
+<!-- } -->
+<!-- p_vals -->
+<!-- model_names[which.min(p_vals)] -->
+<!-- ``` -->
+
+
+<!-- ## T1 * PRIMARY is next most significant -->
+<!-- ```{r} -->
+
+<!-- # baseline -->
+<!-- m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * T1 -->
+<!-- m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + URBAN * T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * PRIMARY -->
+<!-- m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + URBAN * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # T1 * PRIMARY -->
+<!-- m4 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + T1 * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- model_names = c("URBAN * T1", "URBAN * PRIMARY", "T1 * PRIMARY") -->
+<!-- models = c(m2, m3, m4) -->
+<!-- p_vals = c() -->
+<!-- for (m in models){ -->
+<!--   anova_result = anova(m1, m) -->
+<!--   p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2]) -->
+<!-- } -->
+<!-- p_vals -->
+<!-- model_names[which.min(p_vals)] -->
+<!-- ``` -->
+
+
+<!-- ## URBAN * T1 is next most significant -->
+<!-- ```{r} -->
+
+<!-- # baseline -->
+<!-- m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + T1 * PRIMARY +(1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * T1 -->
+<!-- m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + T1 * PRIMARY + URBAN * T1 + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+<!-- # URBAN * PRIMARY -->
+<!-- m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + T1 * PRIMARY + URBAN * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+
+<!-- model_names = c("URBAN * T1", "URBAN * PRIMARY") -->
+<!-- models = c(m2, m3) -->
+<!-- p_vals = c() -->
+<!-- for (m in models){ -->
+<!--   anova_result = anova(m1, m) -->
+<!--   p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2]) -->
+<!-- } -->
+<!-- p_vals -->
+<!-- model_names[which.min(p_vals)] -->
+<!-- ``` -->
+
+
+
+<!-- ## URBAN * PRIMARY is not significant -->
+<!-- ```{r} -->
+
+<!-- # baseline -->
+<!-- m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + T1 * PRIMARY +  URBAN * T1 +(1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+
+<!-- # URBAN * PRIMARY -->
+<!-- m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY  + CYEAR * PRIMARY + CYEAR*T1 + CYEAR * URBAN + T1 * PRIMARY +  URBAN * T1 + URBAN * PRIMARY + (1 + CYEAR|HHID), data=df, REML=FALSE) -->
+
+
+<!-- model_names = c("URBAN * PRIMARY") -->
+<!-- models = c(m3) -->
+<!-- p_vals = c() -->
+<!-- for (m in models){ -->
+<!--   anova_result = anova(m1, m) -->
+<!--   p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2]) -->
+<!-- } -->
+<!-- p_vals -->
+<!-- model_names[which.min(p_vals)] -->
+<!-- ``` -->

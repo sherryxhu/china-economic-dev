@@ -145,18 +145,19 @@ anova(m1)
 ```{r}
 # using BMA 
 # moving response to first column 
-df <- df %>% dplyr::select(THOUSANDS_SHIFTED, everything())
+#df <- df %>% dplyr::select(THOUSANDS_SHIFTED, everything())
 
 library(BMS)
 #bms(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
  #        CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1 + (1 + CYEAR|HHID), data=df)
-bms(df)
+bms(df_X)
 ```
+
 
 ```{r}
 extract_b <- function(m) c(mean(m$mu), colMeans(m$beta)) # Bayes estimators (posterior mean)
 
-df$urban_year_interaction = df$URBAN * df$CYEAR
+df$urban_year_interaction = as.numeric(df$URBAN) * df$CYEAR
 
 m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
           CYEAR*URBAN + PRIMARY*CYEAR 
@@ -173,9 +174,91 @@ m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +
 # to add time component, you would mutate add to identity matrix 
 
 df$HHID = as.factor(df$HHID)
+
+# T1, CYEAR*T1, URBAN*T1, CYEAR*URBAN*T1
+for (l in levels(df$T1)){
+  df[paste("T1", l, sep="_")] = as.integer(df$T1 == l)
+  df[paste("T1", l, "CYEAR", sep="_")] = df[paste("T1", l, sep="_")] * df$CYEAR
+  df[paste("T1", l, "URBAN", sep="_")] = df[paste("T1", l, sep="_")] * as.numeric(df$URBAN)
+  df[paste("T1", l, "URBAN", "CYEAR", sep="_")] = df[paste("T1", l, sep="_")] * as.numeric(df$URBAN) * df$CYEAR
+}
+
+# PRIMARY, PRIMARY*CYEAR, 
+df$PRIMARY = as.factor(df$PRIMARY)
+for (l in levels(df$PRIMARY)){
+  df[paste("PRIMARY", l, sep="_")] = as.integer(df$PRIMARY == l)
+  df[paste("PRIMARY", l, "CYEAR", sep="_")] = df[paste("PRIMARY", l, sep="_")] * df$CYEAR
+}
+
+
+# CYEAR*URBAN
+df$CYEAR_URBAN = df$CYEAR * as.numeric(df$URBAN)
+
+  
 # Note: we are using the whole dataset for now, not the train-test split 
-df_X = df %>% dplyr::select(CYEAR, HHID, T1, URBAN)
-df_Y = df %>% pull(THOUSANDS_SHIFTED)
+df_X = df %>% dplyr::select(CYEAR, URBAN, 
+                            T1_21, 
+                            T1_23,
+                            T1_31,
+                            T1_32,
+                            T1_37,
+                            T1_41,
+                            T1_42,
+                            T1_43,
+                            T1_45,
+                            T1_52,
+                            T1_55,
+                            PRIMARY_HHFARM,     
+                            PRIMARY_HHFISH,     
+                            PRIMARY_hhgard,      
+                            PRIMARY_HHLVST,     
+                            PRIMARY_HHOTHR,     
+                            PRIMARY_HHRETIRE,      
+                            PRIMARY_HHSUB,
+                            CYEAR_URBAN,
+                            PRIMARY_HHFARM_CYEAR,
+                            PRIMARY_HHFISH_CYEAR,
+                            PRIMARY_hhgard_CYEAR,
+                            PRIMARY_HHLVST_CYEAR,
+                            PRIMARY_HHOTHR_CYEAR,
+                            PRIMARY_HHRETIRE_CYEAR,
+                            PRIMARY_HHSUB_CYEAR,
+                            T1_21_CYEAR,
+                            T1_23_CYEAR,
+                            T1_31_CYEAR,
+                            T1_32_CYEAR,
+                            T1_37_CYEAR,
+                            T1_41_CYEAR,
+                            T1_42_CYEAR,
+                            T1_43_CYEAR,
+                            T1_45_CYEAR,
+                            T1_52_CYEAR,
+                            T1_55_CYEAR,
+                            T1_21_URBAN,
+                            T1_23_URBAN,
+                            T1_31_URBAN,
+                            T1_32_URBAN,
+                            T1_37_URBAN,
+                            T1_41_URBAN,
+                            T1_42_URBAN,
+                            T1_43_URBAN,
+                            T1_45_URBAN,
+                            T1_52_URBAN,
+                            T1_55_URBAN,
+                            T1_11_URBAN_CYEAR,
+                            T1_21_URBAN_CYEAR,
+                            T1_23_URBAN_CYEAR,
+                            T1_31_URBAN_CYEAR,
+                            T1_32_URBAN_CYEAR,
+                            T1_37_URBAN_CYEAR,
+                            T1_41_URBAN_CYEAR,
+                            T1_42_URBAN_CYEAR,
+                            T1_43_URBAN_CYEAR,
+                            T1_45_URBAN_CYEAR,
+                            T1_52_URBAN_CYEAR,
+                            T1_55_URBAN_CYEAR,
+                            )
+df_Y = log(df %>% pull(THOUSANDS_SHIFTED))
 m1 <- bhs(df_X, df_Y)
 b_hat_hs <- extract_b(m1)
 # Y_hat_hs <- my_predict(b_hat_hs, X = X_test)
@@ -250,13 +333,12 @@ for(i in 1:n_times){
   test_fold = df[df$HHID %in% test_fold_HHIDs,]
   
   #create a new model on train_fold
-  our_model = lmer(HHINCPC_CPI ~  CYEAR + URBAN + T1 + 
-          CYEAR*URBAN + CYEAR*T1 + URBAN*T1
-        + CYEAR*URBAN*T1 +
-          (1|HHID), data=train_fold)
+  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
+        + (1 + CYEAR|HHID), data=train_fold)
   
   predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
-  residuals = (predictions) - (test_fold$HHINCPC_CPI)
+  residuals = exp(predictions) - (test_fold$THOUSANDS_SHIFTED)
   MSE = mean(residuals^2)
   MSEs = c(MSEs, MSE)
 }
@@ -274,13 +356,78 @@ sd(MSEs)
 
 
 ```{r}
-df <- df %>% dplyr::select(THOUSANDS_SHIFTED, everything())
+# df <- df %>% dplyr::select(THOUSANDS_SHIFTED, everything())
 
+df_bms = df %>% dplyr::select(THOUSANDS_SHIFTED, CYEAR, URBAN, 
+                            T1_21, 
+                            T1_23,
+                            T1_31,
+                            T1_32,
+                            T1_37,
+                            T1_41,
+                            T1_42,
+                            T1_43,
+                            T1_45,
+                            T1_52,
+                            T1_55,
+                            PRIMARY_HHFARM,     
+                            PRIMARY_HHFISH,     
+                            PRIMARY_hhgard,      
+                            PRIMARY_HHLVST,     
+                            PRIMARY_HHOTHR,     
+                            PRIMARY_HHRETIRE,      
+                            PRIMARY_HHSUB,
+                            CYEAR_URBAN,
+                            PRIMARY_HHFARM_CYEAR,
+                            PRIMARY_HHFISH_CYEAR,
+                            PRIMARY_hhgard_CYEAR,
+                            PRIMARY_HHLVST_CYEAR,
+                            PRIMARY_HHOTHR_CYEAR,
+                            PRIMARY_HHRETIRE_CYEAR,
+                            PRIMARY_HHSUB_CYEAR,
+                            T1_21_CYEAR,
+                            T1_23_CYEAR,
+                            T1_31_CYEAR,
+                            T1_32_CYEAR,
+                            T1_37_CYEAR,
+                            T1_41_CYEAR,
+                            T1_42_CYEAR,
+                            T1_43_CYEAR,
+                            T1_45_CYEAR,
+                            T1_52_CYEAR,
+                            T1_55_CYEAR,
+                            T1_21_URBAN,
+                            T1_23_URBAN,
+                            T1_31_URBAN,
+                            T1_32_URBAN,
+                            T1_37_URBAN,
+                            T1_41_URBAN,
+                            T1_42_URBAN,
+                            T1_43_URBAN,
+                            T1_45_URBAN,
+                            T1_52_URBAN,
+                            T1_55_URBAN,
+                            T1_11_URBAN_CYEAR,
+                            T1_21_URBAN_CYEAR,
+                            T1_23_URBAN_CYEAR,
+                            T1_31_URBAN_CYEAR,
+                            T1_32_URBAN_CYEAR,
+                            T1_37_URBAN_CYEAR,
+                            T1_41_URBAN_CYEAR,
+                            T1_42_URBAN_CYEAR,
+                            T1_43_URBAN_CYEAR,
+                            T1_45_URBAN_CYEAR,
+                            T1_52_URBAN_CYEAR,
+                            T1_55_URBAN_CYEAR,
+                            )
 library(BMS)
 #bms(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
  #        CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1 + (1 + CYEAR|HHID), data=df)
+df_bms$THOUSANDS_SHIFTED = log(df_bms$THOUSANDS_SHIFTED)
 bms(df)
+
 ```
+
 
 ```{r}
 df$cyear=df$WAVE-1989
