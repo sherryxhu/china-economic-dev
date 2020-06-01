@@ -26,7 +26,10 @@ sashhinc=read_sas("hhinc_10.sas7bdat")
 # let's make this more interpretable by letting 1989 be year 0
 # also let's convert income to thousands of yuan
 sashhinc$cyear=sashhinc$WAVE-1989
-sashhinc$thousands=sashhinc$hhinc_cpi/1000
+sashhinc$thousands=sashhinc$hhincpc_cpi/1000
+
+# replace NAs w/ null
+sashhinc[is.na(sashhinc)] = 0
 
 ## .1% removed- put in sashhinc_trimmed df
 lower = quantile(sashhinc$thousands, 0.001)
@@ -35,6 +38,11 @@ sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
 
 # log transform
 sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+
+# change to categorical variables
+sashhinc$urban <- as.factor(sashhinc$urban)
+sashhinc$hhid <- as.factor(sashhinc$hhid)
+sashhinc$t1 <- as.factor(sashhinc$t1)
 ```
 
 ```{r}
@@ -44,8 +52,6 @@ summary(sashhinc)
 ```
 
 ```{r}
-sashhinc[is.na(sashhinc)] = 0
-
 # select variables we need for df
 df = dplyr::select(sashhinc,
             hhid,
@@ -75,6 +81,10 @@ df = dplyr::select(sashhinc,
             thousands,
             cyear,
             thousands_shifted)
+
+#add primary income source variable
+df <- df %>% 
+        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
 # select variables we need for df w/o outliers
 df_trimmed = dplyr::select(sashhinc,
@@ -151,6 +161,17 @@ anova(m1)
 
 # Model selection- m1 (outliers included)
 ```{r}
+# using BMA 
+# moving response to first column 
+df <- df %>% dplyr::select(THOUSANDS_SHIFTED, everything())
+
+library(BMS)
+#bms(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
+ #        CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1 + (1 + CYEAR|HHID), data=df)
+bms(df)
+```
+
+```{r}
 extract_b <- function(m) c(mean(m$mu), colMeans(m$beta)) # Bayes estimators (posterior mean)
 
 df$urban_year_interaction = df$URBAN * df$CYEAR
@@ -165,15 +186,19 @@ df$urban_year_interaction = df$URBAN * df$CYEAR
 
 df$HHID = as.factor(df$HHID)
 # Note: we are using the whole dataset for now, not the train-test split 
-df_X = df %>% dplyr::select(CYEAR, HHID, T1, URBAN, urban_year_interaction)
-df_Y = df %>% pull(THOUSANDS)
+df_X = df %>% dplyr::select(CYEAR, HHID, T1, URBAN, Z*b_i)
+df_Y = df %>% pull(THOUSANDS_SHIFTED)
 m1 <- bhs(df_X, df_Y)
 b_hat_hs <- extract_b(m1)
 # Y_hat_hs <- my_predict(b_hat_hs, X = X_test)
 ```
 
 ```{r}
-b_hat_hs
+library(tidyverse)
+library(caret)
+library(leaps)
+# stepwise 
+# step.model <- stepAIC(m1, direction = "both", trace = FALSE)
 ```
 
 # Model w/o Outliers
@@ -200,51 +225,6 @@ b_hat_hs_trim <- extract_b(m2)
 print(b_hat_hs)
 print(b_hat_hs_trim)
 ```
-
-# Alternative way of splitting train-test
-# this code is broken rn 
-```{r}
-# w/ outliers
-df_1989 = subset(df, WAVE==1989)
-length(unique(df_1989$HHID))
-df_1989 = df_1989[order(df_1989$HHINC_CPI),]
-
-i=1
-test_indices = seq(i, nrow(df_1989), n_folds = 5)
-train_fold_HHIDs = df_1989[-test_indices,]$HHID
-test_fold_HHIDs = df_1989[test_indices,]$HHID
-  
-df_train = df[df$HHID %in% train_fold_HHIDs,]
-df_test = df[df$HHID %in% test_fold_HHIDs,]
-
-# w/o outliers
-df_1989_trim = subset(df_trimmed, WAVE==1989)
-length(unique(df_1989_trim$HHID))
-df_1989_trim = df_1989_trim[order(df_1989_trim$HHINC_CPI),]
-
-i=1
-test_indices = seq(i, nrow(df_1989_trim), n_folds = 5)
-train_fold_HHIDs = df_1989_trim[-test_indices,]$HHID
-test_fold_HHIDs = df_1989_trim[test_indices,]$HHID
-  
-df_train_trim = df_trimmed[df_trimmed$HHID %in% train_fold_HHIDs,]
-df_test_trim = df_trimmed[df_trimmed$HHID %in% test_fold_HHIDs,]
-
-# model selection using hopefully representative train-test
-df_X = df_train %>% dplyr::select(CYEAR, HHID, T1, URBAN)
-df_Y = df_train %>% pull(THOUSANDS_SHIFTED)
-m1 <- bhs(df_X, df_Y)
-b_hat_hs <- extract_b(m1)
-
-df_trim_X = df_train_trim %>% dplyr::select(CYEAR, HHID, T1, URBAN)
-df_trim_Y = df_ttrain_trim %>% pull(THOUSANDS_SHIFTED)
-m2 <- bhs(df_trim_X, df_trim_Y)
-b_hat_hs_trim <- extract_b(m2)
-
-print(b_hat_hs)
-print(b_hat_hs_trim)
-```
-
 
 # Residual plots post var. selection
 ```{r}
@@ -333,6 +313,7 @@ mean(MSEs)
 ```{r}
 sashhinc$cyear=sashhinc$WAVE-1989
 sashhinc$thousands=sashhinc$hhinc_cpi/1000
+```
 
 pairs(log(thousands_shifted)~cyear + urban + t1, data=sashhinc)
 ```
