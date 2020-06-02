@@ -138,22 +138,25 @@ gini.years = df %>%
   group_by(WAVE) %>%
   summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
 
-ggplot(gini.years,aes(x = WAVE,y = index)) +
+p1 = ggplot(gini.years,aes(x = factor(WAVE),y = index)) +
   geom_line() +
   geom_point()+
-  geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
-  ggtitle("Gini Index Over Year") +
+  geom_text(aes(label = round(index, 2)),hjust = -0.2,vjust = 0.5) +
+  ggtitle("Gini Index Over Year in China") +
   xlab("Year") + ylab("Gini Index") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
 years = c(1989,1991,1993,1997,2000,2004,2006,2009,2011,2015)
-plot(Lc(df[df$WAVE ==1989,]$HHINCPC_CPI),col="darkred",lwd=2)
+cols <- c("#ffe6e6","#ffcccc","#ff8080","#ff8080","#ff1a1a","#ff1a1a","#b30000","#660000","#330000")
+plot(Lc(df[df$WAVE ==1989,]$HHINCPC_CPI),lwd=2,col = "#ffe6e6")
 for (i in 2:length(years)){
-  lines(Lc(df[df$WAVE ==years[i],]$HHINCPC_CPI),col="darkred",lwd=2)
+  lines(Lc(df[df$WAVE==years[i],]$HHINCPC_CPI),col=cols[i],lwd=2)
 }
-lines(Lc(df[df$WAVE ==1991,]$HHINCPC_CPI),col="darkred",lwd=2)
 
+#png("gini_year.png")
+#print(p1)
+#dev.off()
 ```
 
 ```{r ineq2}
@@ -182,26 +185,41 @@ gini.years.province = df %>%
   group_by(city,WAVE) %>%
   summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
 
-ggplot(gini.years.province,aes(x = WAVE,y = index,group = city,color = city)) +
-  geom_line()+
+p2 = ggplot(gini.years.province,aes(x = factor(WAVE),y = index,group = city,color = city)) +
+  geom_line() +
   geom_point()+
+  geom_line(data = gini.years,aes(x = factor(WAVE),y = index),color = "black") + 
   ggtitle("Gini Index Over Year by Province") +
   xlab("Year") + ylab("Gini Index") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
-```
 
+png("gini_year_province.png")
+print(p2)
+dev.off()
+```
+"HHBUS","HHFARM","HHFISH","HHGARD","HHLVST","HHNRWAGE","HHOTHR","HHRETIRE","HHSUB"
 ```{r ineq3}
+df =  df %>%
+  mutate(primary_income = case_when(PRIMARY == "HHBUS"~ HHBUS,
+                          PRIMARY == "HHFARM"~ HHFARM,
+                          PRIMARY == "HHFISH"~ HHFISH,
+                          PRIMARY == "HHGARD"~ HHGARD,
+                          PRIMARY == "HHLVST"~ HHLVST,
+                          PRIMARY == "HHNRWAGE"~ HHNRWAGE,
+                          PRIMARY == "HHOTHR"~ HHOTHR,
+                          PRIMARY == "HHRETIRE"~ HHRETIRE,
+                          PRIMARY == "HHSUB"~ HHSUB))
 gini.years.primary = df %>%
-  select(HHID,HHINCPC_CPI,T1,WAVE,city,PRIMARY) %>%
-  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
+  select(HHID,primary_income,T1,WAVE,city,PRIMARY) %>%
+  transform(primary_income = ifelse(primary_income < 0, 0, primary_income)) %>%
   group_by(PRIMARY,WAVE) %>%
-  summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
+  summarise(index = ineq(primary_income,type = c("Gini")))
 
 ggplot(gini.years.primary,aes(x = WAVE,y = index,group = PRIMARY,color = PRIMARY)) +
   geom_line()+
-  geom_point()+
-  ggtitle("Gini Index Over Year by Province") +
+  #geom_point()+
+  ggtitle("Gini Index Over Year by Primary Outcome") +
   xlab("Year") + ylab("Gini Index") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -217,9 +235,26 @@ ggplot(gini.years.primary,aes(x = WAVE,y = index)) +
   facet_wrap(~PRIMARY)
 ```
 
+```{r ineq4}
+gini.years.urban = df %>%
+  select(HHID,primary_income,T1,WAVE,URBAN) %>%
+  transform(primary_income = ifelse(primary_income < 0, 0, primary_income)) %>%
+  group_by(URBAN,WAVE) %>%
+  summarise(index = ineq(primary_income,type = c("Gini")))
+
+ggplot(gini.years.urban,aes(x = WAVE,y = index,group = URBAN,color = URBAN)) +
+  geom_line()+
+  #geom_point()+
+  ggtitle("Gini Index Over Year by Urban/Rural") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
 ```{r ratio1}
 ratio.years = df %>%
   select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(WAVE) %>%
   mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
         bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
@@ -238,6 +273,7 @@ ggplot(ratio.years,aes(x = WAVE,y = ratio)) +
 ```{r ratio2}
 ratio.years.province = df %>%
   select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(WAVE,city) %>%
   mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
         bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
@@ -265,6 +301,7 @@ ggplot(ratio.years.province,aes(x = WAVE,y = ratio)) +
 ```{r ratio3}
 ratio.years.primary = df %>%
   select(HHID,HHINCPC_CPI,WAVE,PRIMARY) %>%
+  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(WAVE,PRIMARY) %>%
   mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
         bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
