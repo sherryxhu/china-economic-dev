@@ -18,6 +18,7 @@ library(lme4)
 library(lattice)
 library(caret)
 library(monomvn)
+library(ineq)
 
 # read in data
 require(haven)
@@ -51,7 +52,7 @@ colnames(sashhinc)
 summary(sashhinc)
 ```
 
-```{r}
+```{r data_cleaning}
 # select variables we need for df
 df = dplyr::select(sashhinc,
             hhid,
@@ -82,9 +83,11 @@ df = dplyr::select(sashhinc,
             cyear,
             thousands_shifted)
 
+names(df)<- toupper(names(df))
+
 #add primary income source variable
 df <- df %>% 
-        mutate(PRIMARY= colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
+        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
 # select variables we need for df w/o outliers
 df_trimmed = dplyr::select(sashhinc,
@@ -124,6 +127,166 @@ df_trimmed$T1 = as.factor(df_trimmed$T1)
 
 head(df)
 head(df_trimmed)
+```
+
+```{r ineq1}
+#gini index overtime
+gini.years = df %>%
+  select(HHID,HHINCPC_CPI,WAVE) %>%
+  arrange(HHINCPC_CPI) %>%
+  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
+  group_by(WAVE) %>%
+  summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
+
+ggplot(gini.years,aes(x = WAVE,y = index)) +
+  geom_line() +
+  geom_point()+
+  geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+years = c(1989,1991,1993,1997,2000,2004,2006,2009,2011,2015)
+plot(Lc(df[df$WAVE ==1989,]$HHINCPC_CPI),col="darkred",lwd=2)
+for (i in 2:length(years)){
+  lines(Lc(df[df$WAVE ==years[i],]$HHINCPC_CPI),col="darkred",lwd=2)
+}
+lines(Lc(df[df$WAVE ==1991,]$HHINCPC_CPI),col="darkred",lwd=2)
+
+```
+
+```{r ineq2}
+#gini index overtime and provinces
+df =  df %>%
+  mutate(city = case_when(T1 == 11 ~ "Beijing",
+                          T1 == 21  ~ "LiaoNing",
+                          T1 == 23  ~ "Heilongjiang",
+                          T1 == 31  ~ "Shanghai",
+                          T1 == 32  ~ "Jiangsu",
+                          T1 == 33  ~ "Zhejiang",
+                          T1 == 37  ~ "Shandong",
+                          T1 == 41  ~ "Henan",
+                          T1 == 42  ~ "Hubei",
+                          T1 == 43  ~ "Hunan",
+                          T1 == 45  ~ "Guangxi",
+                          T1 == 52  ~ "Guizhou",
+                          T1 == 53  ~ "Yunnan",
+                          T1 == 55  ~ "Chongqing",
+                          T1 == 61  ~ "Shanxi"))
+
+gini.years.province = df %>%
+  select(HHID,HHINCPC_CPI,T1,WAVE,city) %>%
+  #arrange(HHINCPC_CPI) %>%
+  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
+  group_by(city,WAVE) %>%
+  summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
+
+ggplot(gini.years.province,aes(x = WAVE,y = index,group = city,color = city)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Gini Index Over Year by Province") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r ineq3}
+gini.years.primary = df %>%
+  select(HHID,HHINCPC_CPI,T1,WAVE,city,PRIMARY) %>%
+  transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
+  group_by(PRIMARY,WAVE) %>%
+  summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
+
+ggplot(gini.years.primary,aes(x = WAVE,y = index,group = PRIMARY,color = PRIMARY)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Gini Index Over Year by Province") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(gini.years.primary,aes(x = WAVE,y = index)) +
+  geom_line() +
+  geom_point()+
+  #geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(~PRIMARY)
+```
+
+```{r ratio1}
+ratio.years = df %>%
+  select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  group_by(WAVE) %>%
+  mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
+        bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
+  summarise(ratio = sum(bottom10)/sum(top10),sumb = sum(bottom10),sumt =sum(top10))
+
+ggplot(ratio.years,aes(x = WAVE,y = ratio)) +
+  geom_line() +
+  geom_point()+
+  geom_text(aes(label = round(ratio, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r ratio2}
+ratio.years.province = df %>%
+  select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  group_by(WAVE,city) %>%
+  mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
+        bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
+  summarise(ratio = sum(bottom10)/sum(top10),sumb = sum(bottom10),sumt =sum(top10))
+
+ggplot(ratio.years.province,aes(x = WAVE,y = ratio,group = city,color = city)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Gini Index Over Year by Province") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ratio.years.province,aes(x = WAVE,y = ratio)) +
+  geom_line() +
+  geom_point()+
+  #geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(~city)
+```
+
+```{r ratio3}
+ratio.years.primary = df %>%
+  select(HHID,HHINCPC_CPI,WAVE,PRIMARY) %>%
+  group_by(WAVE,PRIMARY) %>%
+  mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
+        bottom10 = ifelse(HHINCPC_CPI <= quantile(HHINCPC_CPI,0.1),HHINCPC_CPI,0)) %>%
+  summarise(ratio = sum(bottom10)/sum(top10),sumb = sum(bottom10),sumt =sum(top10))
+
+ggplot(ratio.years.primary,aes(x = WAVE,y = ratio,group = PRIMARY,color = PRIMARY)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Gini Index Over Year by Province") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ratio.years.primary,aes(x = WAVE,y = ratio)) +
+  geom_line() +
+  geom_point()+
+  #geom_text(aes(label = round(index, 3),hjust = -0.3,vjust = 0.5)) +
+  ggtitle("Gini Index Over Year") +
+  xlab("Year") + ylab("Gini Index") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(~PRIMARY)
 ```
 
 # Model w/ outliers 
