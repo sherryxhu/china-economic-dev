@@ -125,10 +125,10 @@ head(df_trimmed)
 ## primary is significant
 ```{r}
 # no PRIMARY
-m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 + CYEAR|HHID), data=df, REML=FALSE)
+m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 |HHID), data=df, REML=FALSE)
 
 # PRIMARY
-m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +(1 + CYEAR|HHID), data=df, REML=FALSE)
+m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +(1 |HHID), data=df, REML=FALSE)
 
 anova(m1, m2)
 ```
@@ -148,7 +148,7 @@ current_variables = c("CYEAR",
                       "URBAN",
                       "T1",
                       "PRIMARY",
-                      "(1 + CYEAR|HHID)")
+                      "(1|HHID)")
 current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
 
 while(TRUE){

@@ -128,11 +128,13 @@ head(df_trimmed)
 # Model
 ```{r}
 # fit model with all interactions
-m2=lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN +  
-          CYEAR*URBAN + CYEAR*T1 + URBAN*T1
-          + (1 + CYEAR|HHID) + (1|T1), REML = FALSE, data = df)
-summary(m2)
-anova(m2)
+#hard code CYEAR * T1
+
+
+final_model =lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = df)
+summary(final_model)
 ```
 
 ```{r}
@@ -165,12 +167,9 @@ for(i in 1:n_times){
   test_fold = df[df$HHID %in% test_fold_HHIDs,]
   
   #create a new model on train_fold
-  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN 
-            + CYEAR * PRIMARY
-            + CYEAR * URBAN    
-            + (1+CYEAR+URBAN+PRIMARY | T1)
-          + (1 + CYEAR|HHID), REML = FALSE, data = train_fold)
-  
+  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = train_fold)
   
   predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
   residuals = exp(predictions) - (test_fold$THOUSANDS_SHIFTED)
