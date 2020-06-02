@@ -46,11 +46,7 @@ sashhinc$hhid <- as.factor(sashhinc$hhid)
 sashhinc$t1 <- as.factor(sashhinc$t1)
 ```
 
-```{r}
-# take a peek at dataset
-colnames(sashhinc)
-summary(sashhinc)
-```
+
 
 ```{r data_cleaning}
 # select variables we need for df
@@ -169,9 +165,12 @@ for(i in 1:n_times){
   test_fold = df[df$HHID %in% test_fold_HHIDs,]
   
   #create a new model on train_fold
-  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
-          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
-        + (1 + CYEAR|HHID), data=train_fold)
+  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN 
+            + CYEAR * PRIMARY
+            + CYEAR * URBAN    
+            + (1+CYEAR+URBAN+PRIMARY | T1)
+          + (1 + CYEAR|HHID), REML = FALSE, data = train_fold)
+  
   
   predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
   residuals = exp(predictions) - (test_fold$THOUSANDS_SHIFTED)
@@ -179,4 +178,40 @@ for(i in 1:n_times){
   MSEs = c(MSEs, MSE)
 }
 
+```
+
+```{r}
+qqmath(resid(our_model))
+plot(our_model,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
+
+```{r}
+pairs(log(THOUSANDS_SHIFTED)~CYEAR + URBAN + T1, data=df)
+```
+
+
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
+
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
+
+
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
+
+
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
 ```

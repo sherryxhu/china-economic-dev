@@ -496,9 +496,12 @@ for(i in 1:n_times){
   test_fold = df[df$HHID %in% test_fold_HHIDs,]
   
   #create a new model on train_fold
-  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
-          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
-        + (1 + CYEAR|HHID), data=train_fold)
+  # our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + 
+  #         CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
+  #       + (1 + CYEAR|HHID), data=train_fold)
+  
+  our_model = lmer(log(THOUSANDS_SHIFTED) ~ URBAN + CYEAR + CYEAR*URBAN + 
+                     CYEAR*PRIMARY + (1 + CYEAR| T1) + (1 + CYEAR|HHID), data=train_fold)
   
   predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
   residuals = exp(predictions) - (test_fold$THOUSANDS_SHIFTED)
