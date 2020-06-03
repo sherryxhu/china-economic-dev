@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+# libraries that need to be installed and loaded
 library(tidyverse)
 library(mice)
 library(reshape2)
@@ -19,7 +20,9 @@ library(lattice)
 library(caret)
 library(monomvn)
 library(ineq)
+```
 
+```{r}
 # read in data
 require(haven)
 sashhinc=read_sas("hhinc_10.sas7bdat")
@@ -89,6 +92,10 @@ names(df)<- toupper(names(df))
 df <- df %>% 
         mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+df_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
 # select variables we need for df w/o outliers
 df_trimmed = dplyr::select(sashhinc,
             hhid,
@@ -118,6 +125,10 @@ df_trimmed = dplyr::select(sashhinc,
             thousands,
             cyear,
             thousands_shifted)
+
+#add primary income source variable
+df_trimmed <- df_trimmed %>% 
+        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df_trimmed[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
 names(df)<- toupper(names(df))
 df$T1 = as.factor(df$T1)
@@ -326,20 +337,41 @@ ggplot(ratio.years.primary,aes(x = WAVE,y = ratio)) +
   facet_wrap(~PRIMARY)
 ```
 
-# Model w/ outliers 
+# Initial Model 
 ```{r}
 colnames(df)
 ``` 
 
 ```{r}
 # fit model with all interactions
-m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
-          CYEAR*URBAN + PRIMARY*CYEAR 
-          + CYEAR*T1 + URBAN*T1 + CYEAR*URBAN*T1
-        + (1 + CYEAR|HHID), data=df)
+m1 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df)
 summary(m1)
 anova(m1)
 ```
+
+```{r}
+qqmath(resid(m1))
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+```
+
+We note that the residual plot looks bad and has a fanned shape from left to right. We try a log transform of the response variable. Note that log cannot take on negative values, so we shift all values in the dataset by the minimum value in the dataset and add 0.01. This is the denoted as the variable THOUSANDS_SHIFTED, which we computed above. 
+
+```{r}
+# fit model w/ log transform
+m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df_trimmed)
+```
+
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+```
+
 
 # Model selection- m1 (outliers included)
 ```{r}
