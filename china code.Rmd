@@ -40,8 +40,9 @@ lower = quantile(sashhinc$thousands, 0.001)
 upper = quantile(sashhinc$thousands, 0.999)
 sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
 
-# log transform
+# shift variables to positive in the case we want to use a log transform 
 sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
 
 # change to categorical variables
 sashhinc$urban <- as.factor(sashhinc$urban)
@@ -92,12 +93,8 @@ names(df)<- toupper(names(df))
 df <- df %>% 
         mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
-lower = quantile(sashhinc$thousands, 0.001)
-upper = quantile(sashhinc$thousands, 0.999)
-df_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
-
 # select variables we need for df w/o outliers
-df_trimmed = dplyr::select(sashhinc,
+df_trimmed = dplyr::select(sashhinc_trimmed,
             hhid,
             WAVE,
             hhinc_cpi, 
@@ -360,11 +357,11 @@ plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = 
 We note that the residual plot looks bad and has a fanned shape from left to right. We try a log transform of the response variable. Note that log cannot take on negative values, so we shift all values in the dataset by the minimum value in the dataset and add 0.01. This is the denoted as the variable THOUSANDS_SHIFTED, which we computed above. 
 
 ```{r}
-# fit model w/ log transform
+# fit model w/ log transform w/ outliers 
 m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
           CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
           + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
-        + (1 | HHID), data=df_trimmed)
+        + (1 | HHID), data=df)
 ```
 
 ```{r}
@@ -372,7 +369,20 @@ qqmath(resid(m2))
 plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
 ```
 
+```{r}
+# fit model w/ log transform w/o outliers 
+m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df_trimmed)
+```
 
+```{r}
+qqmath(resid(m3))
+plot(m3,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+```
+
+################################# BAD BELOW 
 # Model selection- m1 (outliers included)
 ```{r}
 # using BMA 
