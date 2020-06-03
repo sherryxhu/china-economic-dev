@@ -364,6 +364,8 @@ m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +
           CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
           + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
         + (1 | HHID), data=df)
+
+summary(m2)
 ```
 
 ```{r}
@@ -377,6 +379,8 @@ m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +
           CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
           + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
         + (1 | HHID), data=df_trimmed)
+
+summary(m3)
 ```
 
 ```{r}
