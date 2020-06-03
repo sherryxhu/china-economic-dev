@@ -16,6 +16,9 @@ library(lattice)
 library(caret)
 library(monomvn)
 library(ineq)
+library(car)
+library(knitr)
+library(reshape)
 ```
 
 # Data Preparation
@@ -387,7 +390,7 @@ library(ineq)
 library(tidyverse)
 #gini index overtime
 gini.years = df %>%
-  select(HHID,HHINCPC_CPI,WAVE) %>%
+  dplyr::select(HHID,HHINCPC_CPI,WAVE) %>%
   arrange(HHINCPC_CPI) %>%
   transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(WAVE) %>%
@@ -434,7 +437,7 @@ df =  df %>%
                           T1 == 61  ~ "Shanxi"))
 gini.years$city = c("China","China","China","China","China","China","China","China","China","China")
 gini.years.province = df %>%
-  select(HHID,HHINCPC_CPI,T1,WAVE,city) %>%
+  dplyr::select(HHID,HHINCPC_CPI,T1,WAVE,city) %>%
   #arrange(HHINCPC_CPI) %>%
   transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(city,WAVE) %>%
@@ -466,7 +469,7 @@ df =  df %>%
                           PRIMARY == "HHRETIRE"~ HHRETIRE,
                           PRIMARY == "HHSUB"~ HHSUB))
 gini.years.primary = df %>%
-  select(HHID,primary_income,T1,WAVE,city,PRIMARY) %>%
+  dplyr::select(HHID,primary_income,T1,WAVE,city,PRIMARY) %>%
   transform(primary_income = ifelse(primary_income < 0, 0, primary_income)) %>%
   group_by(PRIMARY,WAVE) %>%
   summarise(index = ineq(primary_income,type = c("Gini")))
@@ -492,7 +495,7 @@ ggplot(gini.years.primary,aes(x = WAVE,y = index)) +
 
 ```{r ineq4}
 gini.years.urban = df %>%
-  select(HHID,primary_income,T1,WAVE,URBAN) %>%
+  dplyr::select(HHID,primary_income,T1,WAVE,URBAN) %>%
   transform(primary_income = ifelse(primary_income < 0, 0, primary_income)) %>%
   group_by(URBAN,WAVE) %>%
   summarise(index = ineq(primary_income,type = c("Gini")))
@@ -508,7 +511,7 @@ ggplot(gini.years.urban,aes(x = WAVE,y = index,group = URBAN,color = URBAN)) +
 
 ```{r ratio1}
 ratio.years = df %>%
-  select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  dplyr::select(HHID,HHINCPC_CPI,WAVE,city) %>%
   transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(WAVE) %>%
   mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
@@ -527,7 +530,7 @@ ggplot(ratio.years,aes(x = WAVE,y = ratio)) +
 
 ```{r ratio2}
 ratio.years.province = df %>%
-  select(HHID,HHINCPC_CPI,WAVE,city) %>%
+  dplyr::select(HHID,HHINCPC_CPI,WAVE,city) %>%
   transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(WAVE,city) %>%
   mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
@@ -555,7 +558,7 @@ ggplot(ratio.years.province,aes(x = WAVE,y = ratio)) +
 
 ```{r ratio3}
 ratio.years.primary = df %>%
-  select(HHID,HHINCPC_CPI,WAVE,PRIMARY) %>%
+  dplyr::select(HHID,HHINCPC_CPI,WAVE,PRIMARY) %>%
   transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
   group_by(WAVE,PRIMARY) %>%
   mutate(top10 = ifelse(HHINCPC_CPI >= quantile(HHINCPC_CPI,0.9),HHINCPC_CPI,0),
@@ -579,4 +582,188 @@ ggplot(ratio.years.primary,aes(x = WAVE,y = ratio)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))+
   facet_wrap(~PRIMARY)
+```
+
+# Beta coefficient test
+```{r}
+library(gridExtra)
+coefs <- names(fixef(our_model))
+#year
+coeftest_year <- linearHypothesis(our_model, "CYEAR=0")
+#urban/rural
+coeftest_urban <- linearHypothesis(our_model, "URBAN1=0")
+#province
+coeftest_province <- linearHypothesis(our_model, coefs[4:14])
+#primary
+coeftest_primary <- linearHypothesis(our_model, coefs[15:21])
+#year:primary
+coeftest_yearprimary <- linearHypothesis(our_model, coefs[22:28])
+#year:urban
+coeftest_yearurban <- linearHypothesis(our_model, coefs[29])
+#year:province
+coeftest_yearprovince <- linearHypothesis(our_model, coefs[30:40])
+#urban:province
+coeftest_urbanprovince <- linearHypothesis(our_model, coefs[41:51])
+ 
+
+coeftest <- na.omit(rbind(coeftest_year, coeftest_urban, coeftest_province, coeftest_primary, coeftest_yearprimary, coeftest_yearurban, coeftest_yearprovince, coeftest_urbanprovince))
+var <- c("Year","Urban", "Province", "Primary Income Source", "Year:Primary Source", "Year:Urban", "Year:Province", "Urban:Province")
+coeftest <- cbind(var, coeftest)
+kable(coeftest, col.names = c("Variable", "Degrees of Freedom", "Chi-squared", "p-value"), caption="Hypothesis Testing of Urban Coefficients",align="c")
+
+png("beta-test.png")
+p <- tableGrob(coeftest)
+grid.arrange(p)
+dev.off()
+```
+
+#Variation in household income by province
+```{r}
+yrs <- c(0,2,4,8,11,15,17,20,22,26)
+xvar <- c("1989", "1991", "1993", "1997", "2000", "2004", "2006", "2009", "2011", "2015")
+estimate <- as.data.frame(summary(our_model)$coefficients)
+estimate <- estimate %>% dplyr::select(Estimate)
+
+for (i in yrs) {
+  prov21 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T121",]+yrs*estimate["CYEAR:T121",]
+  df7 <- data.frame(prov21)
+}
+for (i in yrs) {
+  prov23 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T123",]+yrs*estimate["CYEAR:T123",]
+  df8 <- data.frame(prov23)
+}
+for (i in yrs) {
+  prov31 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T131",]+yrs*estimate["CYEAR:T131",]
+  df9 <- data.frame(prov31)
+}
+for (i in yrs) {
+  prov32 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T132",]+yrs*estimate["CYEAR:T132",]
+  df10 <- data.frame(prov32)
+}
+for (i in yrs) {
+  prov37 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T137",]+yrs*estimate["CYEAR:T137",]
+  df11 <- data.frame(prov37)
+}
+for (i in yrs) {
+  prov41 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T141",]+yrs*estimate["CYEAR:T141",]
+  df12 <- data.frame(prov41)
+}
+for (i in yrs) {
+  prov42 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T142",]+yrs*estimate["CYEAR:T142",]
+  df13 <- data.frame(prov42)
+}
+for (i in yrs) {
+  prov43 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T143",]+yrs*estimate["CYEAR:T143",]
+  df14 <- data.frame(prov43)
+}
+for (i in yrs) {
+  prov45 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T145",]+yrs*estimate["CYEAR:T145",]
+  df15 <- data.frame(prov45)
+}
+for (i in yrs) {
+  prov52 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T152",]+yrs*estimate["CYEAR:T152",]
+  df16 <- data.frame(prov52)
+}
+for (i in yrs) {
+  prov55 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T155",]+yrs*estimate["CYEAR:T155",]
+  df17 <- data.frame(prov55)
+}
+for (i in yrs) {
+  prov11 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]
+  df18 <- data.frame(prov11)
+}
+
+prov.data <- cbind(xvar, df18, df7, df8, df9, df10, df11, df12, df13, df14, df15, df16, df17)
+prov.data$xvar <- as.numeric(as.character(prov.data$xvar))
+mdf2 <- melt(prov.data, id.vars="xvar")
+
+plot2 <- ggplot(mdf2, aes(x=xvar, y=value, group=variable, color=variable)) + 
+  geom_line() +
+  geom_point() +
+  scale_color_discrete(name="Province",
+                       labels=c("Beijing", "Liaoning", "Heilongjiang", "Shanghai", "Jiangsu", "Shandong", "Henan", "Hubei", "Hunan", "Guangxi", "Guizhou", "Chongqing")) +
+  labs(title="Variation in Household Income by Province",
+       x="Year",
+       y="Beta coefficients")
+```
+
+#Variation in household income by urban/rural status
+```{r}
+for (i in yrs) {
+  urb <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["URBAN1",]+estimate["CYEAR:URBAN1",]
+  df19 <- data.frame(urb)
+}
+for (i in yrs) {
+  rur <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]
+  df20 <- data.frame(rur)
+}
+
+urb.data <- cbind(xvar, df19, df20)
+urb.data$xvar <- as.numeric(as.character(urb.data$xvar))
+mdf3 <- melt(urb.data, id.vars="xvar")
+
+plot3 <- ggplot(mdf3, aes(x=xvar, y=value, group=variable, color=variable)) +
+  geom_line() +
+  geom_point() +
+  scale_color_discrete(name="Status",
+                       labels=c("Urban", "Rural")) +
+  labs(title="Variation in Household Income by Urban/Rural Status",
+       x="Year",
+       y="Beta coefficients")
+```
+
+#Variation in household income by income source
+```{r}
+for (i in yrs) {
+  bus <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]
+  d <- data.frame(bus)
+}
+
+for (i in yrs) {
+  farm <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHFARM",]+yrs*estimate["CYEAR:PRIMARYHHFARM",]
+  df0 <- data.frame(farm)
+}
+
+for (i in yrs) {
+  fish <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHFISH",]+yrs*estimate["CYEAR:PRIMARYHHFISH",]
+  df1 <- data.frame(fish)
+}
+
+for (i in yrs) {
+  gard <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHGARD",]+yrs*estimate["CYEAR:PRIMARYHHGARD",]
+  df2 <- data.frame(gard)
+}
+
+for (i in yrs) {
+  lvst <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHLVST",]+yrs*estimate["CYEAR:PRIMARYHHLVST",]
+  df3 <- data.frame(lvst)
+}
+
+for (i in yrs) {
+  othr <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHOTHR",]+yrs*estimate["CYEAR:PRIMARYHHOTHR",]
+  df4 <- data.frame(othr)
+}
+
+for (i in yrs) {
+  retire <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHRETIRE",]+yrs*estimate["CYEAR:PRIMARYHHRETIRE",]
+  df5 <- data.frame(retire)
+}
+
+for (i in yrs) {
+  sub <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHSUB",]+yrs*estimate["CYEAR:PRIMARYHHSUB",]
+  df6 <- data.frame(sub)
+}
+
+source.data <- cbind(xvar, d, df0, df1, df2, df3, df4, df5, df6)
+source.data$xvar <- as.numeric(as.character(source.data$xvar))
+mdf1 <- melt(source.data, id.vars="xvar")
+
+plot1 <- ggplot(mdf1, aes(x=xvar, y=value, group=variable, color=variable)) + 
+  geom_line(aes(color=variable)) +
+  geom_point() +
+  scale_color_discrete(name="Income Source",
+                       labels=c("Business","Farming", "Fishing", "Gardening", "Livestock", "Others", "Retirement", "Subsidies")) +
+  labs(title="Variation in Household Income Source",
+       x="Year",
+       y="Beta coefficients")
 ```
