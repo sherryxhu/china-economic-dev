@@ -37,7 +37,6 @@ sashhinc[is.na(sashhinc)] = 0
 
 # shift variables to positive in the case we want to use a log transform 
 sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
-sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
 
 # change to categorical variables
 sashhinc$urban <- as.factor(sashhinc$urban)
@@ -49,6 +48,7 @@ sashhinc$t1 <- as.factor(sashhinc$t1)
 lower = quantile(sashhinc$thousands, 0.001)
 upper = quantile(sashhinc$thousands, 0.999)
 sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
 
 ```
 

@@ -319,3 +319,26 @@ MSEs
 mean(MSEs)
 sd(MSEs)
 ```
+
+
+
+## linear model
+
+
+```{r}
+library(olsrr) # olsrr==0.5.3
+
+model.lm = lm(THOUSANDS ~ HHID + URBAN +  CYEAR +  T1 + PRIMARY 
+              + URBAN * CYEAR 
+              + URBAN * T1 
+              + URBAN * PRIMARY 
+              + CYEAR * T1
+              + CYEAR * PRIMARY
+              + T1 * PRIMARY,
+              data = df)
+# backward = ols_step_backward_aic(model.lm)
+# summary(backward$model)
+forward = ols_step_forward_aic(model.lm)
+summary(forward$model)
+
+```

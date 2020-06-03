@@ -8,6 +8,16 @@ output: html_document
 # Data Preparation
 
 ```{r}
+library(tidyverse)
+library(mice)
+library(reshape2)
+library(ggplot2)
+library(lme4)
+library(lattice)
+library(caret)
+library(monomvn)
+library(ineq)
+
 # read in data
 require(haven)
 sashhinc=read_sas("hhinc_10.sas7bdat")
@@ -22,7 +32,6 @@ sashhinc[is.na(sashhinc)] = 0
 
 # shift variables to positive in the case we want to use a log transform 
 sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
-sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
 
 # change to categorical variables
 sashhinc$urban <- as.factor(sashhinc$urban)
@@ -34,6 +43,7 @@ sashhinc$t1 <- as.factor(sashhinc$t1)
 lower = quantile(sashhinc$thousands, 0.001)
 upper = quantile(sashhinc$thousands, 0.999)
 sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
 
 ```
 
@@ -122,6 +132,52 @@ df_trimmed$T1 = as.factor(df_trimmed$T1)
 
 head(df)
 head(df_trimmed)
+```
+# Preliminary Checks
+
+```{r}
+# fit model with all interactions
+m1 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df)
+summary(m1)
+anova(m1)
+```
+
+```{r}
+qqmath(resid(m1))
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Initial Model Residuals")
+```
+
+```{r}
+# fit model w/ log transform w/ outliers 
+m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df)
+
+summary(m2)
+```
+
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Logged Model Residuals")
+```
+
+```{r}
+# fit model w/ log transform w/o outliers 
+m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df_trimmed)
+
+summary(m3)
+```
+
+```{r}
+qqmath(resid(m3))
+plot(m3,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Residuals of log model without outliers")
 ```
 
 # Model Selection
@@ -280,6 +336,22 @@ four_way_model
 ```
 
 
+# final model
+```{r}
+final_model = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 
+          + (1|HHID), REML = FALSE, data = df)
+summary(final_model)
+```
+
+# model diagnostics
+
+```{r}
+qqmath(resid(final_model))
+plot(final_model,resid(.,scaled=TRUE)~fitted(.),abline=0, main="Final Model Residuals")
+```
+
+
 # cross validation
 
 ```{r}
@@ -295,9 +367,8 @@ our_MSEs = c()
 two_way_MSEs = c()
 three_way_MSEs = c()
 four_way_MSEs = c()
-for(i in 1:n_times){
-  set.seed(i)
-  
+set.seed(0)
+for(i in 1:test_size){
   HHIDs = sample(HHIDs)
   # split into train and test folds
   test_indices = seq(i, length(HHIDs), test_size)
@@ -351,18 +422,8 @@ sd(four_way_MSEs)
 
 ```
 
+# Income inequality 
 
-# residual plots
+insert gini index code here
 
-```{r}
-plot_predictions <- function(predictions){
-  ggplot(test_fold, aes(x = predictions, y = THOUSANDS)) + geom_point(color = "red") + geom_abline(intercept = 0, slope = 1, size=0.9) + 
-  geom_abline(intercept = 0, slope = 1.1, color="gray", linetype = "dashed", size=1) + 
-  geom_abline(intercept = 0, slope = .9, color="gray", linetype = "dashed", size=1) + 
-  geom_abline(intercept = 0, slope = .8, color="gray", linetype = "dotted", size=1) + 
-  geom_abline(intercept = 0, slope = 1.2, color="gray", linetype = "dotted", size=1) + labs(title="Predicted vs Actual", x="predicted", "actual")
-}
-predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
- 
-plot_predictions(predictions) 
-```
+insert peining's code here
