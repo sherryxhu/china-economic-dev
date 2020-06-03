@@ -1,0 +1,330 @@
+---
+title: "Final_China_Code"
+author: "Daniel Zhou"
+date: "6/3/2020"
+output: html_document
+---
+
+# Data Preparation
+```{r}
+library(tidyverse)
+library(mice)
+library(reshape2)
+library(ggplot2)
+library(lme4)
+library(lattice)
+library(caret)
+library(monomvn)
+library(ineq)
+
+# read in data
+require(haven)
+sashhinc=read_sas("hhinc_10.sas7bdat")
+
+# let's make this more interpretable by letting 1989 be year 0
+# also let's convert income to thousands of yuan
+sashhinc$cyear=sashhinc$WAVE-1989
+sashhinc$thousands=sashhinc$hhincpc_cpi/1000
+
+# replace NAs w/ null
+sashhinc[is.na(sashhinc)] = 0
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
+# log transform
+sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+
+# change to categorical variables
+sashhinc$urban <- as.factor(sashhinc$urban)
+sashhinc$hhid <- as.factor(sashhinc$hhid)
+sashhinc$t1 <- as.factor(sashhinc$t1)
+```
+
+```{r data_cleaning}
+# select variables we need for df
+df = dplyr::select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
+
+names(df)<- toupper(names(df))
+
+#add primary income source variable
+df <- df %>% 
+        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
+
+names(df)<- toupper(names(df))
+df$T1 = as.factor(df$T1)
+
+head(df)
+```
+
+# Model Selection
+
+## primary is significant
+```{r}
+# no PRIMARY
+m1 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + (1 |HHID), data=df, REML=FALSE)
+
+# PRIMARY
+m2 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY +(1 |HHID), data=df, REML=FALSE)
+
+anova(m1, m2)
+```
+
+# 2 way interactions
+```{r}
+variables_of_interest = c("CYEAR * URBAN", 
+                          "CYEAR * T1", 
+                          "CYEAR * PRIMARY", 
+                          "URBAN * T1", 
+                          "URBAN * PRIMARY", 
+                          "T1 * PRIMARY")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("CYEAR",
+                      "URBAN",
+                      "T1",
+                      "PRIMARY",
+                      "(1|HHID)")
+current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("THOUSANDS~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  # perform anova on baseline and a new model, record the resulting p-value
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+```{r}
+two_way_model = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
+two_way_model
+```
+
+
+# 3 way interaction
+
+```{r} 
+
+# CYEAR, URBAN, T1, PRIMARY
+variables_of_interest = c("CYEAR * URBAN * T1", 
+                          "CYEAR * URBAN * PRIMARY",
+                          "CYEAR * T1 * PRIMARY", 
+                          "URBAN * CYEAR * PRIMARY")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_formula = two_way_model
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("THOUSANDS ~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+```{r}
+three_way_model = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
+three_way_model
+```
+
+## four way model
+```{r}
+
+m1 = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 + CYEAR * T1 * PRIMARY + CYEAR * URBAN * T1 
+          + (1|HHID), REML = FALSE, data = df)
+
+m2 = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 + CYEAR * T1 * PRIMARY + CYEAR * URBAN * T1 
+          + CYEAR * URBAN * T1 * PRIMARY
+          + (1|HHID), REML = FALSE, data = df)
+anova(m1, m2)
+```
+
+```{r}
+four_way_model = as.formula("THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY + CYEAR*T1 + URBAN*T1 + CYEAR * T1 * PRIMARY + CYEAR * URBAN * T1 + CYEAR * URBAN * T1 * PRIMARY + (1|HHID)")
+four_way_model
+```
+
+
+# cross validation
+
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+our_MSEs = c()
+two_way_MSEs = c()
+three_way_MSEs = c()
+four_way_MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 
+          + (1|HHID), REML = FALSE, data = train_fold)
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  our_MSEs = c(our_MSEs, MSE)
+  
+  two_way = lmer(two_way_model, data=train_fold, REML=FALSE)
+  predictions = predict(two_way, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  two_way_MSEs = c(two_way_MSEs, MSE)
+  
+  three_way = lmer(three_way_model, data=train_fold, REML=FALSE)
+  predictions = predict(three_way, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  three_way_MSEs = c(three_way_MSEs, MSE)  
+  
+  four_way = lmer(four_way_model, data=train_fold, REML=FALSE)
+  predictions = predict(four_way, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  four_way_MSEs = c(four_way_MSEs, MSE)
+}
+```
+
+```{r}
+mean(our_MSEs)
+sd(our_MSEs)
+
+mean(two_way_MSEs)
+sd(two_way_MSEs)
+
+mean(three_way_MSEs)
+sd(three_way_MSEs)
+
+mean(four_way_MSEs)
+sd(four_way_MSEs)
+
+```
+
+
+# residual plots
+
+```{r}
+plot_predictions <- function(predictions){
+  ggplot(test_fold, aes(x = predictions, y = THOUSANDS)) + geom_point(color = "red") + geom_abline(intercept = 0, slope = 1, size=0.9) + 
+  geom_abline(intercept = 0, slope = 1.1, color="gray", linetype = "dashed", size=1) + 
+  geom_abline(intercept = 0, slope = .9, color="gray", linetype = "dashed", size=1) + 
+  geom_abline(intercept = 0, slope = .8, color="gray", linetype = "dotted", size=1) + 
+  geom_abline(intercept = 0, slope = 1.2, color="gray", linetype = "dotted", size=1) + labs(title="Predicted vs Actual", x="predicted", "actual")
+}
+predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+ 
+plot_predictions(predictions) 
+```

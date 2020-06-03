@@ -353,7 +353,7 @@ anova(m1)
 
 ```{r}
 qqmath(resid(m1))
-plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Initial Model Residuals")
 ```
 
 We note that the residual plot looks bad and has a fanned shape from left to right. We try a log transform of the response variable. Note that log cannot take on negative values, so we shift all values in the dataset by the minimum value in the dataset and add 0.01. This is the denoted as the variable THOUSANDS_SHIFTED, which we computed above. 
@@ -368,7 +368,7 @@ m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +
 
 ```{r}
 qqmath(resid(m2))
-plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Logged Model Residuals")
 ```
 
 ```{r}
