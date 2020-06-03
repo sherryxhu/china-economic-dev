@@ -35,11 +35,6 @@ sashhinc$thousands=sashhinc$hhincpc_cpi/1000
 # replace NAs w/ null
 sashhinc[is.na(sashhinc)] = 0
 
-## .1% removed- put in sashhinc_trimmed df
-lower = quantile(sashhinc$thousands, 0.001)
-upper = quantile(sashhinc$thousands, 0.999)
-sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
-
 # shift variables to positive in the case we want to use a log transform 
 sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
 sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
@@ -48,6 +43,13 @@ sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_tr
 sashhinc$urban <- as.factor(sashhinc$urban)
 sashhinc$hhid <- as.factor(sashhinc$hhid)
 sashhinc$t1 <- as.factor(sashhinc$t1)
+
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
 ```
 
 ```{r}
@@ -379,7 +381,7 @@ m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +
 
 ```{r}
 qqmath(resid(m3))
-plot(m3,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+plot(m3,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Residuals of log model without outliers")
 ```
 
 ################################# BAD BELOW 
