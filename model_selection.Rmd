@@ -125,10 +125,10 @@ head(df_trimmed)
 ## primary is significant
 ```{r}
 # no PRIMARY
-m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 |HHID), data=df, REML=FALSE)
+m1 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + (1 |HHID), data=df, REML=FALSE)
 
 # PRIMARY
-m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY +(1 |HHID), data=df, REML=FALSE)
+m2 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY +(1 |HHID), data=df, REML=FALSE)
 
 anova(m1, m2)
 ```
@@ -149,20 +149,20 @@ current_variables = c("CYEAR",
                       "T1",
                       "PRIMARY",
                       "(1|HHID)")
-current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
 
 while(TRUE){
   print("current baseline")
   print(current_variables)
   # get baseline
-  current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+  current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
   baseline = lmer(current_formula, data=df, REML=FALSE)
   
   # loop through remaining variables of interest and create a new model
   models = c()
   for (var in remaining_variables_of_interest){
     curr_var_loop = c(current_variables, var)
-    current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    current_formula = as.formula(paste("THOUSANDS~ ",paste(curr_var_loop, collapse="+"),sep = ""))
     new_model = lmer(current_formula, data=df, REML=FALSE)
     models = c(models, new_model)
   }

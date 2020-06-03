@@ -183,14 +183,13 @@ for(i in 1:n_times){
 
 ```
 
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
 
-
-
-
-
-
-
-
+# log
 
 ```{r}
 HHIDs = unique(df$HHID)
@@ -215,10 +214,10 @@ for(i in 1:n_times){
   test_fold = df[df$HHID %in% test_fold_HHIDs,]
   
   #create a new model on train_fold
-  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+  our_model = lmer(log(THOUSANDS_SHIFTED) ~  CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
           CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
           + (1|HHID), REML = FALSE, data = train_fold)
-  
+
   predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
   residuals = exp(predictions) - (test_fold$THOUSANDS_SHIFTED)
   MSE = mean(residuals^2)
@@ -227,19 +226,96 @@ for(i in 1:n_times){
 
 ```
 
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
 
 
 
 
 
 
+```{r}
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+df_trimmed = subset(df, lower < THOUSANDS & THOUSANDS < upper)
+
+our_model = lmer(log(THOUSANDS_SHIFTED) ~  CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = df_trimmed)
 
 
+qqmath(resid(our_model))
+plot(our_model,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
 
 
+```{r}
+## .1% removed- put in sashhinc_trimmed df
+
+our_model = lmer(THOUSANDS ~  CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = df_trimmed)
 
 
+qqmath(resid(our_model))
+plot(our_model,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
+
+```{r}
+"CYEAR"    "URBAN"    "T1"       "PRIMARY"  "(1|HHID)"
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+df_trimmed = subset(df, lower < THOUSANDS & THOUSANDS < upper)
+
+our_model = lmer(log(THOUSANDS_SHIFTED) ~  CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 
+          + (1|HHID), REML = FALSE, data = df_trimmed)
+
+qqmath(resid(our_model))
+plot(our_model,resid(.,scaled=TRUE)~fitted(.),abline=0)
+```
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+our_model = lmer(THOUSANDS ~  CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 
+          + (1|HHID), REML = FALSE, data = train_fold)
+
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
+
+```
 
 
-
-
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
