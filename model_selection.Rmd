@@ -196,6 +196,47 @@ while(TRUE){
 ```{r}
 current_variables
 ```
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR * T1 +   
+               CYEAR * PRIMARY + T1 * PRIMARY + URBAN * T1 + CYEAR * URBAN 
+          + (1|HHID), REML = FALSE, data = train_fold)
+
+
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
+
+```
+
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
 
 # 3 way interaction
 
@@ -213,26 +254,25 @@ current_variables = c("CYEAR",
                       "URBAN",
                       "T1",
                       "PRIMARY",
-                      "(1 + CYEAR|HHID)",
+                      "(1|HHID)",
                       "CYEAR * PRIMARY", 
                       "CYEAR * T1", 
                       "CYEAR * URBAN",
-                      "T1 * PRIMARY", 
                       "URBAN * T1")
-current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
 
 while(TRUE){
   print("current baseline")
   print(current_variables)
   # get baseline
-  current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(current_variables, collapse="+"),sep = ""))
+  current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
   baseline = lmer(current_formula, data=df, REML=FALSE)
   
   # loop through remaining variables of interest and create a new model
   models = c()
   for (var in remaining_variables_of_interest){
     curr_var_loop = c(current_variables, var)
-    current_formula = as.formula(paste("log(THOUSANDS_SHIFTED) ~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    current_formula = as.formula(paste("THOUSANDS ~ ",paste(curr_var_loop, collapse="+"),sep = ""))
     new_model = lmer(current_formula, data=df, REML=FALSE)
     models = c(models, new_model)
   }
@@ -260,29 +300,108 @@ while(TRUE){
 }
 ```
 
+
+```{r}
+current_variables
+```
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 + CYEAR * T1 * PRIMARY + CYEAR * URBAN * T1 
+          + (1|HHID), REML = FALSE, data = train_fold)
+
+
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
+
+```
+
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
+```
+
 ## CYEAR * URBAN * T1 * PRIMARY is significant
 ```{r}
-# no PRIMARY
-m1 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 + CYEAR|HHID)
-          + CYEAR * PRIMARY 
-          + CYEAR * T1
-          + CYEAR * URBAN
-          + T1 * PRIMARY 
-          + URBAN * T1 
-          + CYEAR * T1 * PRIMARY 
-          + CYEAR * URBAN * T1, data=df, REML=FALSE)
 
-# PRIMARY
-m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + (1 + CYEAR|HHID)
-          + CYEAR * PRIMARY 
-          + CYEAR * T1
-          + CYEAR * URBAN
-          + T1 * PRIMARY 
-          + URBAN * T1 
-          + CYEAR * T1 * PRIMARY 
-          + CYEAR * URBAN * T1
-          + CYEAR * URBAN * T1 * PRIMARY, data=df, REML=FALSE)
+m1 = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 + CYEAR * T1 * PRIMARY + CYEAR * URBAN * T1 
+          + (1|HHID), REML = FALSE, data = df)
+
+m2 = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 + CYEAR * T1 * PRIMARY + CYEAR * URBAN * T1 
+          + CYEAR * URBAN * T1 * PRIMARY
+          + (1|HHID), REML = FALSE, data = df)
 anova(m1, m2)
+```
+
+
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 + CYEAR * T1 * PRIMARY + CYEAR * URBAN * T1 
+          + CYEAR * URBAN * T1 * PRIMARY
+          + (1|HHID), REML = FALSE, data = train_fold)
+
+
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
+
+```
+
+```{r}
+MSEs
+mean(MSEs)
+sd(MSEs)
 ```
 
 # Cross validation
