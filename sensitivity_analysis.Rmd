@@ -266,7 +266,6 @@ plot(our_model,resid(.,scaled=TRUE)~fitted(.),abline=0)
 ```
 
 ```{r}
-"CYEAR"    "URBAN"    "T1"       "PRIMARY"  "(1|HHID)"
 lower = quantile(sashhinc$thousands, 0.001)
 upper = quantile(sashhinc$thousands, 0.999)
 df_trimmed = subset(df, lower < THOUSANDS & THOUSANDS < upper)
@@ -301,9 +300,10 @@ for(i in 1:n_times){
   test_fold = df[df$HHID %in% test_fold_HHIDs,]
   
   #create a new model on train_fold
-our_model = lmer(THOUSANDS ~  CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
-          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 
+  our_model = lmer(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY + CYEAR*URBAN + CYEAR*PRIMARY 
+           + CYEAR*T1 + URBAN*T1 
           + (1|HHID), REML = FALSE, data = train_fold)
+
 
   predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
   residuals = (predictions) - (test_fold$THOUSANDS)

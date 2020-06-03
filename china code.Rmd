@@ -35,11 +35,6 @@ sashhinc$thousands=sashhinc$hhincpc_cpi/1000
 # replace NAs w/ null
 sashhinc[is.na(sashhinc)] = 0
 
-## .1% removed- put in sashhinc_trimmed df
-lower = quantile(sashhinc$thousands, 0.001)
-upper = quantile(sashhinc$thousands, 0.999)
-sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
-
 # shift variables to positive in the case we want to use a log transform 
 sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
 sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
@@ -48,6 +43,13 @@ sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_tr
 sashhinc$urban <- as.factor(sashhinc$urban)
 sashhinc$hhid <- as.factor(sashhinc$hhid)
 sashhinc$t1 <- as.factor(sashhinc$t1)
+
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
 ```
 
 ```{r}
@@ -351,7 +353,7 @@ anova(m1)
 
 ```{r}
 qqmath(resid(m1))
-plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Initial Model Residuals")
 ```
 
 We note that the residual plot looks bad and has a fanned shape from left to right. We try a log transform of the response variable. Note that log cannot take on negative values, so we shift all values in the dataset by the minimum value in the dataset and add 0.01. This is the denoted as the variable THOUSANDS_SHIFTED, which we computed above. 
@@ -368,7 +370,7 @@ summary(m2)
 
 ```{r}
 qqmath(resid(m2))
-plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Logged Model Residuals")
 ```
 
 ```{r}
@@ -383,7 +385,7 @@ summary(m3)
 
 ```{r}
 qqmath(resid(m3))
-plot(m3,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+plot(m3,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Residuals of log model without outliers")
 ```
 
 ################################# BAD BELOW 
