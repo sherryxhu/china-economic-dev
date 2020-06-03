@@ -19,20 +19,12 @@ library(ineq)
 library(car)
 library(knitr)
 library(reshape)
+
 ```
 
 # Data Preparation
 
 ```{r}
-library(tidyverse)
-library(mice)
-library(reshape2)
-library(ggplot2)
-library(lme4)
-library(lattice)
-library(caret)
-library(monomvn)
-library(ineq)
 
 # read in data
 require(haven)
@@ -264,7 +256,7 @@ m2 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY +(1 |HHID), data=df, REML=FAL
 anova(m1, m2)
 ```
 
-# 2 way interactions
+## 2 way interactions
 ```{r}
 variables_of_interest = c("CYEAR * URBAN", 
                           "CYEAR * T1", 
@@ -329,7 +321,7 @@ two_way_model
 ```
 
 
-# 3 way interaction
+## 3 way interaction
 
 ```{r} 
 
@@ -420,6 +412,10 @@ summary(final_model)
 ```{r}
 qqmath(resid(final_model))
 plot(final_model,resid(.,scaled=TRUE)~fitted(.),abline=0, main="Final Model Residuals")
+```
+
+```{r}
+vif(final_model)
 ```
 
 
@@ -697,23 +693,23 @@ ggplot(ratio.years.primary,aes(x = WAVE,y = ratio)) +
 # Beta coefficient test
 ```{r}
 library(gridExtra)
-coefs <- names(fixef(our_model))
+coefs <- names(fixef(final_model))
 #year
-coeftest_year <- linearHypothesis(our_model, "CYEAR=0")
+coeftest_year <- linearHypothesis(final_model, "CYEAR=0")
 #urban/rural
-coeftest_urban <- linearHypothesis(our_model, "URBAN1=0")
+coeftest_urban <- linearHypothesis(final_model, "URBAN1=0")
 #province
-coeftest_province <- linearHypothesis(our_model, coefs[4:14])
+coeftest_province <- linearHypothesis(final_model, coefs[4:14])
 #primary
-coeftest_primary <- linearHypothesis(our_model, coefs[15:21])
+coeftest_primary <- linearHypothesis(final_model, coefs[15:21])
 #year:primary
-coeftest_yearprimary <- linearHypothesis(our_model, coefs[22:28])
+coeftest_yearprimary <- linearHypothesis(final_model, coefs[22:28])
 #year:urban
-coeftest_yearurban <- linearHypothesis(our_model, coefs[29])
+coeftest_yearurban <- linearHypothesis(final_model, coefs[29])
 #year:province
-coeftest_yearprovince <- linearHypothesis(our_model, coefs[30:40])
+coeftest_yearprovince <- linearHypothesis(final_model, coefs[30:40])
 #urban:province
-coeftest_urbanprovince <- linearHypothesis(our_model, coefs[41:51])
+coeftest_urbanprovince <- linearHypothesis(final_model, coefs[41:51])
  
 
 coeftest <- na.omit(rbind(coeftest_year, coeftest_urban, coeftest_province, coeftest_primary, coeftest_yearprimary, coeftest_yearurban, coeftest_yearprovince, coeftest_urbanprovince))
@@ -731,7 +727,7 @@ dev.off()
 ```{r}
 yrs <- c(0,2,4,8,11,15,17,20,22,26)
 xvar <- c("1989", "1991", "1993", "1997", "2000", "2004", "2006", "2009", "2011", "2015")
-estimate <- as.data.frame(summary(our_model)$coefficients)
+estimate <- as.data.frame(summary(final_model)$coefficients)
 estimate <- estimate %>% dplyr::select(Estimate)
 
 for (i in yrs) {

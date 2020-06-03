@@ -328,7 +328,7 @@ sd(MSEs)
 ```{r}
 library(olsrr) # olsrr==0.5.3
 
-model.lm = lm(THOUSANDS ~ HHID + URBAN +  CYEAR +  T1 + PRIMARY 
+model.lm = lm(THOUSANDS ~ URBAN +  CYEAR +  T1 + PRIMARY 
               + URBAN * CYEAR 
               + URBAN * T1 
               + URBAN * PRIMARY 
