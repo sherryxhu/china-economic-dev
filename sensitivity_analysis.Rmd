@@ -1,0 +1,245 @@
+---
+title: "sensitivity_analysis"
+author: "Daniel Zhou"
+date: "6/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(mice)
+library(reshape2)
+library(ggplot2)
+library(lme4)
+library(lattice)
+library(caret)
+library(monomvn)
+library(ineq)
+
+# read in data
+require(haven)
+sashhinc=read_sas("hhinc_10.sas7bdat")
+
+# let's make this more interpretable by letting 1989 be year 0
+# also let's convert income to thousands of yuan
+sashhinc$cyear=sashhinc$WAVE-1989
+sashhinc$thousands=sashhinc$hhincpc_cpi/1000
+
+# replace NAs w/ null
+sashhinc[is.na(sashhinc)] = 0
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
+# log transform
+sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+
+# change to categorical variables
+sashhinc$urban <- as.factor(sashhinc$urban)
+sashhinc$hhid <- as.factor(sashhinc$hhid)
+sashhinc$t1 <- as.factor(sashhinc$t1)
+```
+
+```{r data_cleaning}
+# select variables we need for df
+df = dplyr::select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
+
+names(df)<- toupper(names(df))
+
+#add primary income source variable
+df <- df %>% 
+        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
+
+# select variables we need for df w/o outliers
+df_trimmed = dplyr::select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
+
+names(df)<- toupper(names(df))
+df$T1 = as.factor(df$T1)
+
+names(df_trimmed)<- toupper(names(df_trimmed))
+df_trimmed$T1 = as.factor(df_trimmed$T1)
+
+head(df)
+head(df_trimmed)
+```
+
+## sensitivity analysis
+
+```{r}
+df_positive = df
+
+# df_positive$HHINCPC_CPI[df_positive$HHINCPC_CPI<=0] =0.01
+
+# df_positive$THOUSANDS = df_positive$HHINCPC_CPI / 1000
+
+df_positive = subset(df, HHINCPC_CPI > 0)
+
+positive_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = df_positive)
+summary(positive_model)
+
+regular_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = df)
+summary(regular_model)
+
+```
+
+# non log
+
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer((THOUSANDS) ~  CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = train_fold)
+
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+HHIDs = unique(df$HHID)
+
+# do random sampling
+n_times = 10
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+for(i in 1:n_times){
+  set.seed(i)
+  
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #create a new model on train_fold
+  our_model = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN +  T1 + PRIMARY + CYEAR*PRIMARY + 
+          CYEAR*URBAN + CYEAR*T1 + URBAN*T1 + T1*PRIMARY 
+          + (1|HHID), REML = FALSE, data = train_fold)
+  
+  predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
+  residuals = exp(predictions) - (test_fold$THOUSANDS_SHIFTED)
+  MSE = mean(residuals^2)
+  MSEs = c(MSEs, MSE)
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
