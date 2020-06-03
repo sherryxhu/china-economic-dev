@@ -6,17 +6,8 @@ output: html_document
 ---
 
 # Data Preparation
-```{r}
-library(tidyverse)
-library(mice)
-library(reshape2)
-library(ggplot2)
-library(lme4)
-library(lattice)
-library(caret)
-library(monomvn)
-library(ineq)
 
+```{r}
 # read in data
 require(haven)
 sashhinc=read_sas("hhinc_10.sas7bdat")
@@ -29,18 +20,27 @@ sashhinc$thousands=sashhinc$hhincpc_cpi/1000
 # replace NAs w/ null
 sashhinc[is.na(sashhinc)] = 0
 
-## .1% removed- put in sashhinc_trimmed df
-lower = quantile(sashhinc$thousands, 0.001)
-upper = quantile(sashhinc$thousands, 0.999)
-sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
-
-# log transform
+# shift variables to positive in the case we want to use a log transform 
 sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-0.01)
+sashhinc_trimmed$thousands_shifted=sashhinc_trimmed$thousands - (min(sashhinc_trimmed$thousands)-0.01)
 
 # change to categorical variables
 sashhinc$urban <- as.factor(sashhinc$urban)
 sashhinc$hhid <- as.factor(sashhinc$hhid)
 sashhinc$t1 <- as.factor(sashhinc$t1)
+
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(sashhinc$thousands, 0.001)
+upper = quantile(sashhinc$thousands, 0.999)
+sashhinc_trimmed = subset(sashhinc, lower < thousands & thousands < upper)
+
+```
+
+```{r}
+# take a peek at dataset
+colnames(sashhinc)
+summary(sashhinc)
 ```
 
 ```{r data_cleaning}
@@ -80,10 +80,48 @@ names(df)<- toupper(names(df))
 df <- df %>% 
         mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
+# select variables we need for df w/o outliers
+df_trimmed = dplyr::select(sashhinc_trimmed,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted)
+
+#add primary income source variable
+df_trimmed <- df_trimmed %>% 
+        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df_trimmed[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
+
 names(df)<- toupper(names(df))
 df$T1 = as.factor(df$T1)
 
+names(df_trimmed)<- toupper(names(df_trimmed))
+df_trimmed$T1 = as.factor(df_trimmed$T1)
+
 head(df)
+head(df_trimmed)
 ```
 
 # Model Selection
