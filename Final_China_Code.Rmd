@@ -29,7 +29,6 @@ sashhinc$urban <- as.factor(sashhinc$urban)
 sashhinc$hhid <- as.factor(sashhinc$hhid)
 sashhinc$t1 <- as.factor(sashhinc$t1)
 
-
 ## .1% removed- put in sashhinc_trimmed df
 lower = quantile(sashhinc$thousands, 0.001)
 upper = quantile(sashhinc$thousands, 0.999)
@@ -123,6 +122,62 @@ df_trimmed$T1 = as.factor(df_trimmed$T1)
 head(df)
 head(df_trimmed)
 ```
+
+# Initial Model 
+```{r}
+colnames(df)
+``` 
+
+```{r}
+# fit model with all interactions
+m1 = lmer(THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df)
+summary(m1)
+anova(m1)
+```
+
+```{r}
+qqmath(resid(m1))
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Initial Model Residuals")
+```
+
+We note that the residual plot looks bad and has a fanned shape from left to right. We try a log transform of the response variable. Note that log cannot take on negative values, so we shift all values in the dataset by the minimum value in the dataset and add 0.01. This is the denoted as the variable THOUSANDS_SHIFTED, which we computed above. 
+
+```{r}
+# fit model w/ log transform w/ outliers 
+m2 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df)
+
+summary(m2)
+```
+
+```{r}
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Logged Model Residuals")
+```
+
+It looks like the log transform improved the residual plots a bit. However, is this because the plot is zoomed out so much, or is it actually making a difference? Let's remove the outliers, which are causing the zoom out, and reevaluate the effect of the log transform. 
+
+```{r}
+# fit model w/ log transform w/o outliers 
+m3 = lmer(log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=df_trimmed)
+
+summary(m3)
+```
+
+```{r}
+qqmath(resid(m3))
+plot(m3,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Residuals of log model without outliers")
+```
+
+We see that indeed, the log transformation did not do much to help the residuals plot. We proceed without a log transform for sake of simplicity and for interpretability reasons. 
 
 # Model Selection
 
