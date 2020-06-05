@@ -97,6 +97,7 @@ names(df)<- toupper(names(df))
 df <- df %>% 
         mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
+
 # select variables we need for df w/o outliers
 df_trimmed = dplyr::select(sashhinc_trimmed,
             hhid,
@@ -131,6 +132,17 @@ df_trimmed = dplyr::select(sashhinc_trimmed,
 df_trimmed <- df_trimmed %>% 
         mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df_trimmed[, c("HHBUS", "HHFARM", "HHFISH", "hhgard", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
 
+#add variable indicating whether household receives income from specific sources
+df <- df %>% 
+  mutate(business_ind = factor(as.numeric(HHBUS != 0)),
+         farm_ind = factor(as.numeric(HHFARM != 0)),
+         fish_ind = factor(as.numeric(HHFISH != 0)),
+         gard_ind = factor(as.numeric(HHGARD != 0)),
+         lvst_ind = factor(as.numeric(HHLVST != 0)),
+         othr_ind = factor(as.numeric(HHOTHR != 0)),
+         retire_ind = factor(as.numeric(HHRETIRE != 0)),
+         sub_ind = factor(as.numeric(HHSUB != 0)))
+
 names(df)<- toupper(names(df))
 df$T1 = as.factor(df$T1)
 
@@ -139,7 +151,9 @@ df_trimmed$T1 = as.factor(df_trimmed$T1)
 
 head(df)
 head(df_trimmed)
+
 ```
+
 # Preliminary Checks
 
 ```{r}
@@ -788,9 +802,10 @@ plot2 <- ggplot(mdf2, aes(x=xvar, y=value, group=variable, color=variable)) +
   geom_point() +
   scale_color_discrete(name="Province",
                        labels=c("Beijing", "Liaoning", "Heilongjiang", "Shanghai", "Jiangsu", "Shandong", "Henan", "Hubei", "Hunan", "Guangxi", "Guizhou", "Chongqing")) +
-  labs(title="Variation in Household Income by Province",
+  labs(title="Changes in Household Income per Capita Over Time \nby Province",
        x="Year",
-       y="Beta coefficients")
+       y="Beta coefficients") +
+    theme(plot.title = element_text(size=20))
 ```
 
 #Variation in household income by urban/rural status
@@ -813,9 +828,10 @@ plot3 <- ggplot(mdf3, aes(x=xvar, y=value, group=variable, color=variable)) +
   geom_point() +
   scale_color_discrete(name="Status",
                        labels=c("Urban", "Rural")) +
-  labs(title="Variation in Household Income by Urban/Rural Status",
+  labs(title="Changes in Household Income per Capita Over Time \nby Urban/Rural Status",
        x="Year",
-       y="Beta coefficients")
+       y="Beta coefficients") +
+  theme(plot.title = element_text(size=20))
 ```
 
 #Variation in household income by income source
@@ -869,7 +885,8 @@ plot1 <- ggplot(mdf1, aes(x=xvar, y=value, group=variable, color=variable)) +
   geom_point() +
   scale_color_discrete(name="Income Source",
                        labels=c("Business","Farming", "Fishing", "Gardening", "Livestock", "Others", "Retirement", "Subsidies")) +
-  labs(title="Variation in Household Income Source",
+  labs(title="Changes in Household Income per Capita Over Time \nby Primary Income Source",
        x="Year",
-       y="Beta coefficients")
+       y="Beta coefficients") +
+    theme(plot.title = element_text(size=20))
 ```
