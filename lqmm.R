@@ -1,6 +1,9 @@
 library(lqmm)
 
-fit.lqmm <- lqmm(fixed = log(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + URBAN*T1+ T1 + PRIMARY +  CYEAR*T1 +CYEAR*URBAN + CYEAR*PRIMARY,random = ~ 1,	group = HHID,data = df,control = lqmmControl(method = "df", UP_max_iter = 600))
+fit.lqmm <- lqmm(fixed = THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY +
+                   URBAN*T1+   CYEAR*T1 +CYEAR*URBAN + CYEAR*PRIMARY,
+                 random = ~ 1,	group = HHID,data = df,
+                 control = lqmmControl(method = "df", UP_max_iter = 3000))
 
   
 qqmath(resid(fit.lqmm))

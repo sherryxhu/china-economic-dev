@@ -1,6 +1,6 @@
 ---
 title: "Final_China_Code"
-author: "Daniel Zhou"
+author: "Daniel Zhou, Sherry Hu, Peining Yang, Siyi Xu"
 date: "6/3/2020"
 output: html_document
 ---
@@ -796,7 +796,7 @@ plot2 <- ggplot(mdf2, aes(x=xvar, y=value, group=variable, color=variable)) +
 #Variation in household income by urban/rural status
 ```{r}
 for (i in yrs) {
-  urb <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["URBAN1",]+estimate["CYEAR:URBAN1",]
+  urb <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["URBAN1",]+estimate["URBAN1:CYEAR",]
   df19 <- data.frame(urb)
 }
 for (i in yrs) {
