@@ -340,6 +340,7 @@ model_score(model_final, "model_final")
 ```{r}
 qqmath(resid(model_final))
 plot(model_final,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+hist(df_trimmed$LOG_THOUSANDS_SHIFTED)
 ```
 
 ```{r}
@@ -364,103 +365,6 @@ summary(model_outliers)
 ```
 
 
-# old model selection
-```{r}
-# m2 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND + GARD_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | HHID),data=df_trimmed, REML = FALSE)
 
-variables_of_interest = c("CYEAR * URBAN", 
-            		        # T1_11_IND*CYEAR+ Beijing
-                        #  "T1_21_IND*CYEAR", Liaoning Baseline
-                         "T1_23_IND*CYEAR",
-                        # "T1_31_IND*CYEAR",
-                         "T1_32_IND*CYEAR",
-                         "T1_37_IND*CYEAR",
-                         "T1_41_IND*CYEAR",
-                         "T1_42_IND*CYEAR",
-                         "T1_43_IND*CYEAR",
-                         "T1_45_IND*CYEAR",
-                         "T1_52_IND*CYEAR",
-                        # "T1_55_IND*CYEAR",
-                          "CYEAR * BUSINESS_IND",
-                          "CYEAR * FARM_IND", 
-                          "CYEAR * FISH_IND",
-                         # "CYEAR * GARD_IND",
-                          "CYEAR * LVST_IND",
-                          "CYEAR * OTHR_IND", 
-                          "CYEAR * RETIRE_IND",
-                          "CYEAR * SUB_IND")
 
-remaining_variables_of_interest = variables_of_interest
 
-current_variables = c("CYEAR",
-                      "URBAN",
-                      "T1",
-                      "BUSINESS_IND",
-                      "FARM_IND", 
-                      "FISH_IND",
-                      # "GARD_IND",
-                      "LVST_IND",
-                      "OTHR_IND", 
-                      "RETIRE_IND",
-                      "SUB_IND",
-                      "(1|HHID)")
-current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
-
-while(TRUE){
-  print("current baseline")
-  print(current_variables)
-  # get baseline
-  current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
-  baseline = lmer(current_formula, data=df, REML=FALSE)
-  
-  # loop through remaining variables of interest and create a new model
-  models = c()
-  for (var in remaining_variables_of_interest){
-    curr_var_loop = c(current_variables, var)
-    current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED~ ",paste(curr_var_loop, collapse="+"),sep = ""))
-    new_model = lmer(current_formula, data=df, REML=FALSE)
-    models = c(models, new_model)
-  }
-  
-  # perform anova on baseline and a new model, record the resulting p-value
-  p_vals = c()
-  for (m in models){
-    anova_result = anova(baseline, m)
-    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
-  }
-  
-  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
-  if (min(p_vals)>0.05){
-    print("no remaining significant variables of interest")
-    break
-  }
-  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
-  
-  # add most signficant variable to model
-  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
-  
-  # remove the most significant variable from search space
-  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
-  if (length(remaining_variables_of_interest)==0){
-    break
-  }
-}
-```
-
-```{r}
-selected_model = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
-selected_model
-```
-
-```{r}
-our_model = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + 
-    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | 
-    HHID) + CYEAR * FARM_IND + CYEAR * RETIRE_IND + T1_23_IND * 
-    CYEAR + T1_32_IND * CYEAR + CYEAR * BUSINESS_IND + T1_21_IND * 
-    CYEAR + T1_31_IND * CYEAR + CYEAR * LVST_IND + T1_42_IND * 
-    CYEAR + CYEAR * OTHR_IND + T1_45_IND * CYEAR + T1_41_IND * 
-    CYEAR + CYEAR * URBAN, data=df_trimmed)
-model_score(our_model, "our_model")
-qqmath(resid(our_model))
-plot(our_model,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
-```
