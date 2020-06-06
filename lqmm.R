@@ -1,9 +1,12 @@
 library(lqmm)
 
-fit.lqmm <- lqmm(fixed = THOUSANDS ~ CYEAR + URBAN + T1 + PRIMARY +
-                   URBAN*T1+   CYEAR*T1 +CYEAR*URBAN + CYEAR*PRIMARY,
-                 random = ~ 1,	group = HHID,data = df,
-                 control = lqmmControl(method = "df", UP_max_iter = 3000))
+fit.lqmm <- lqmm(fixed = LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + 
+                   FISH_IND + GARD_IND + LVST_IND + OTHR_IND + RETIRE_IND + 
+                   SUB_IND  + CYEAR * T1 + CYEAR * FARM_IND + CYEAR * 
+                   RETIRE_IND + CYEAR * BUSINESS_IND + CYEAR * LVST_IND + URBAN * 
+                   T1 + CYEAR * OTHR_IND,
+                 random = ~ 1,	group = HHID,data = df_trimmed,
+                 control = lqmmControl(method = "df", UP_max_iter = 10000))
 
   
 qqmath(resid(fit.lqmm))

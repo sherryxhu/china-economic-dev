@@ -1,0 +1,328 @@
+---
+title: "fixes"
+author: "Daniel Zhou"
+date: "6/5/2020"
+output: html_document
+---
+
+```{r}
+# libraries that need to be installed and loaded
+library(tidyverse)
+library(mice)
+library(reshape2)
+library(ggplot2)
+library(lme4)
+library(lattice)
+library(caret)
+library(monomvn)
+library(ineq)
+library(car)
+library(knitr)
+library(reshape)
+
+```
+
+```{r}
+
+# read in data
+require(haven)
+sashhinc=read_sas("hhinc_10.sas7bdat")
+
+# let's make this more interpretable by letting 1989 be year 0
+# also let's convert income to thousands of yuan
+sashhinc$cyear=sashhinc$WAVE-1989
+sashhinc$thousands=sashhinc$hhincpc_cpi/1000
+
+# replace NAs w/ null
+sashhinc[is.na(sashhinc)] = 0
+sashhinc_trimmed = sashhinc
+# shift variables to positive in the case we want to use a log transform 
+sashhinc$thousands_shifted=sashhinc$thousands - (min(sashhinc$thousands)-1)
+sashhinc$log_thousands_shifted = log(sashhinc$thousands_shifted)
+
+
+# change to categorical variables
+sashhinc$urban <- as.factor(sashhinc$urban)
+sashhinc$hhid <- as.factor(sashhinc$hhid)
+sashhinc$t1 <- as.factor(sashhinc$t1)
+
+```
+
+
+```{r data_cleaning}
+# select variables we need for df
+df = dplyr::select(sashhinc,
+            hhid,
+            WAVE,
+            hhinc_cpi, 
+            hhincpc_cpi, 
+            HHBUS, 
+            HHBUSimp, 
+            HHFARM, 
+            HHFARMimp, 
+            HHFISH, 
+            HHFISHimp, 
+            hhgard, 
+            HHGARDimp,
+            HHLVST,
+            HHLVSTimp,
+            hhNRwage,
+            HHNRWAGEimp,
+            HHOTHR,
+            HHOTHRimp,
+            HHRETIRE,
+            HHRETIREimp,
+            HHSUB,
+            HHSUBimp,
+            t1,
+            urban,
+            thousands,
+            cyear,
+            thousands_shifted,
+            log_thousands_shifted)
+
+names(df)<- toupper(names(df))
+
+#add primary income source variable
+df <- df %>% 
+        mutate(Primary = colnames(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")])[apply(df[, c("HHBUS", "HHFARM", "HHFISH", "HHGARD", "HHLVST", "HHOTHR", "HHRETIRE", "HHSUB")], 1, which.max)])
+
+#add variable indicating whether household receives income from specific sources
+df <- df %>% 
+  mutate(business_ind = factor(as.numeric(HHBUS != 0)),
+         farm_ind = factor(as.numeric(HHFARM != 0)),
+         fish_ind = factor(as.numeric(HHFISH != 0)),
+         gard_ind = factor(as.numeric(HHGARD != 0)),
+         lvst_ind = factor(as.numeric(HHLVST != 0)),
+         othr_ind = factor(as.numeric(HHOTHR != 0)),
+         retire_ind = factor(as.numeric(HHRETIRE != 0)),
+         sub_ind = factor(as.numeric(HHSUB != 0)))
+
+
+df <- df %>% 
+  mutate(T1_11_ind = factor(T1 == 11),
+         T1_21_ind = factor(T1 == 21),
+         T1_23_ind = factor(T1 == 23),
+         T1_31_ind = factor(T1 == 31),
+         T1_32_ind = factor(T1 == 32),
+         T1_37_ind = factor(T1 == 37),
+         T1_41_ind = factor(T1 == 41),
+         T1_42_ind = factor(T1 == 42),
+         T1_43_ind = factor(T1 == 43),
+         T1_45_ind = factor(T1 == 45),
+         T1_52_ind = factor(T1 == 52),
+         T1_55_ind = factor(T1 == 55))
+
+names(df)<- toupper(names(df))
+df$T1 = as.factor(df$T1)
+
+
+head(df)
+
+## .1% removed- put in sashhinc_trimmed df
+lower = quantile(df$THOUSANDS, 0.001)
+upper = quantile(df$THOUSANDS, 0.999)
+df_trimmed = subset(df, lower < THOUSANDS)
+df_trimmed$THOUSANDS_SHIFTED =df_trimmed$THOUSANDS - (min(df_trimmed$THOUSANDS)-1)
+df_trimmed$LOG_THOUSANDS_SHIFTED = log(df_trimmed$THOUSANDS_SHIFTED)
+```
+
+
+
+# split into train test 
+
+```{r}
+df=df_trimmed
+HHIDs = unique(df$HHID)
+set.seed(0)
+HHIDs = sample(HHIDs)
+# split into train and test folds
+test_indices = seq(1, length(HHIDs), 5)
+train_fold_HHIDs = HHIDs[-test_indices]
+test_fold_HHIDs = HHIDs[test_indices]
+
+train_fold = df[df$HHID %in% train_fold_HHIDs,]
+test_fold = df[df$HHID %in% test_fold_HHIDs,]
+
+model_score = function(model, model_name){
+  predictions = predict(model, test_fold, allow.new.levels=TRUE)
+  residuals = exp((predictions)) - exp((test_fold$LOG_THOUSANDS_SHIFTED))
+  MSE = mean(residuals^2)
+  cat(model_name, "MSE", MSE)
+}
+```
+
+```{r}
+# fit model with all interactions
+m1 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + PRIMARY + 
+          CYEAR*URBAN + PRIMARY*CYEAR + URBAN*PRIMARY
+          + CYEAR*T1 + URBAN*T1 + T1*PRIMARY
+        + (1 | HHID), data=train_fold)
+summary(m1)
+model_score(m1, "m1")
+qqmath(resid(m1))
+plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals", main="Initial Model Residuals")
+```
+
+
+
+```{r}
+m2 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND + GARD_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | HHID),data=df_trimmed, REML = FALSE)
+summary(m2)
+
+```
+
+```{r}
+model_score(m2, "m2")
+qqmath(resid(m2))
+plot(m2,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+
+```
+
+
+```{r}
+library(lmerTest)
+m3 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + 
+            T1 +  
+            URBAN + 
+            BUSINESS_IND +
+            FARM_IND + 
+            FISH_IND + 
+            # GARD_IND + baseline
+            LVST_IND + 
+            OTHR_IND + 
+            RETIRE_IND + 
+            SUB_IND + 
+            (1 | HHID) +
+            CYEAR * URBAN +
+		        # T1_11_IND*CYEAR+ baseline
+             T1_21_IND*CYEAR+
+             T1_23_IND*CYEAR+
+             T1_31_IND*CYEAR+
+             T1_32_IND*CYEAR+
+             T1_37_IND*CYEAR+
+             T1_41_IND*CYEAR+
+             T1_42_IND*CYEAR+
+             T1_43_IND*CYEAR+
+             T1_45_IND*CYEAR+
+             T1_52_IND*CYEAR+
+             T1_55_IND*CYEAR+
+		        URBAN * T1 +
+            CYEAR * BUSINESS_IND +
+            CYEAR * FARM_IND +
+            CYEAR * FISH_IND +
+           # CYEAR * GARD_IND + baseline
+            CYEAR * LVST_IND +
+            CYEAR * OTHR_IND +
+            CYEAR * RETIRE_IND +
+            CYEAR * SUB_IND,data=df_trimmed, REML = FALSE)
+lmerTest::step(m3)
+```
+
+# FINAL MODEL HERE 
+```{r}
+lmertest_model = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 + URBAN + BUSINESS_IND + FARM_IND + 
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | 
+    HHID) + T1_21_IND + T1_23_IND + T1_31_IND + T1_32_IND + T1_37_IND + 
+    T1_41_IND + T1_42_IND + T1_43_IND + T1_45_IND + T1_52_IND + 
+    T1_55_IND + CYEAR:URBAN + CYEAR:T1_21_IND + CYEAR:T1_32_IND + 
+    CYEAR:T1_37_IND + CYEAR:T1_41_IND + CYEAR:T1_42_IND + CYEAR:T1_43_IND + 
+    CYEAR:T1_45_IND + CYEAR:T1_52_IND + CYEAR:T1_55_IND + T1:URBAN + 
+    CYEAR:BUSINESS_IND + CYEAR:LVST_IND + CYEAR:OTHR_IND + CYEAR:RETIRE_IND + 
+    CYEAR:SUB_IND, data=df_trimmed)
+model_score(lmertest_model, "lmertest_model")
+qqmath(resid(lmertest_model))
+plot(lmertest_model,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+
+```
+
+
+
+# old model selection
+```{r}
+# m2 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND + GARD_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | HHID),data=df_trimmed, REML = FALSE)
+
+variables_of_interest = c("CYEAR * URBAN", 
+                          "CYEAR * T1", 
+                          "URBAN * T1",
+                          "CYEAR * BUSINESS_IND",
+                          "CYEAR * FARM_IND", 
+                          "CYEAR * FISH_IND",
+                          "CYEAR * GARD_IND",
+                          "CYEAR * LVST_IND",
+                          "CYEAR * OTHR_IND", 
+                          "CYEAR * RETIRE_IND",
+                          "CYEAR * SUB_IND")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("CYEAR",
+                      "URBAN",
+                      "T1",
+                      "BUSINESS_IND",
+                      "FARM_IND", 
+                      "FISH_IND",
+                      "GARD_IND",
+                      "LVST_IND",
+                      "OTHR_IND", 
+                      "RETIRE_IND",
+                      "SUB_IND",
+                      "(1|HHID)")
+current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("THOUSANDS~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  # perform anova on baseline and a new model, record the resulting p-value
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+```{r}
+selected_model = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+selected_model
+```
+
+```{r}
+our_model = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + 
+                   FISH_IND + GARD_IND + LVST_IND + OTHR_IND + RETIRE_IND + 
+                   SUB_IND  + CYEAR * T1 + CYEAR * FARM_IND + CYEAR * 
+                   RETIRE_IND + CYEAR * BUSINESS_IND + CYEAR * LVST_IND + URBAN * 
+                   T1 + CYEAR * OTHR_IND + (1|HHID), data=df_trimmed)
+model_score(our_model, "our_model")
+qqmath(resid(our_model))
+plot(our_model,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
+```
