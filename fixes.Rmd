@@ -46,12 +46,14 @@ sashhinc$urban <- as.factor(sashhinc$urban)
 sashhinc$hhid <- as.factor(sashhinc$hhid)
 sashhinc$t1 <- as.factor(sashhinc$t1)
 
+# refactor t1
+sashhinc$t1 <- factor(sashhinc$t1, levels = c("21", "11", "23", "31", "32", "37", "41", "42", "43", "45", "52", "55"))
+
 ```
 
 
 ```{r data_cleaning}
 # select variables we need for df
-df = df[!is.na(df$HHINCPC_CPI), ]
 df = dplyr::select(sashhinc,
             hhid,
             WAVE,
@@ -83,6 +85,8 @@ df = dplyr::select(sashhinc,
             log_thousands_shifted)
 
 names(df)<- toupper(names(df))
+
+df = df[!is.na(df$HHINCPC_CPI), ]
 
 #add primary income source variable
 df <- df %>% 
@@ -151,7 +155,7 @@ df$LOG_THOUSANDS_SHIFTED = log(df$THOUSANDS_SHIFTED)
 
 # split into train test 
 ```{r}
-#df=df_trimmed
+# train test fold using full dataset
 HHIDs = unique(df$HHID)
 set.seed(0)
 HHIDs = sample(HHIDs)
@@ -167,8 +171,28 @@ model_score = function(model, model_name){
   predictions = predict(model, test_fold, allow.new.levels=TRUE)
   residuals = exp((predictions)) - exp((test_fold$LOG_THOUSANDS_SHIFTED))
   MSE = mean(residuals^2)
-  cat(model_name, "MSE", MSE)
+  cat("full dataset", model_name, "MSE", MSE)
 }
+
+# train test fold using trimmed dataset
+HHIDs = unique(df_trimmed$HHID)
+set.seed(0)
+HHIDs = sample(HHIDs)
+# split into train and test folds
+test_indices = seq(1, length(HHIDs), 5)
+train_fold_HHIDs = HHIDs[-test_indices]
+test_fold_HHIDs = HHIDs[test_indices]
+
+trimmed_train_fold = df_trimmed[df_trimmed$HHID %in% train_fold_HHIDs,]
+trimmed_test_fold = df_trimmed[df_trimmed$HHID %in% test_fold_HHIDs,]
+
+model_score_trimmed = function(model, model_name){
+  predictions = predict(model, trimmed_test_fold, allow.new.levels=TRUE)
+  residuals = exp((predictions)) - exp((trimmed_test_fold$LOG_THOUSANDS_SHIFTED))
+  MSE = mean(residuals^2)
+  cat("trimmed dataset", model_name, "MSE", MSE)
+}
+
 ```
 
 
@@ -179,13 +203,13 @@ model_score = function(model, model_name){
 # gardening is the baseline for income source
 m1 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND +  LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + CYEAR*URBAN + #T1_21_IND*CYEAR +#
 T1_23_IND*CYEAR + T1_32_IND*CYEAR + T1_41_IND*CYEAR + T1_42_IND*CYEAR + T1_43_IND*CYEAR + T1_45_IND*CYEAR + T1_52_IND*CYEAR + CYEAR * BUSINESS_IND + CYEAR * FARM_IND + CYEAR * FISH_IND +
-CYEAR * LVST_IND + CYEAR * OTHR_IND + CYEAR * RETIRE_IND + CYEAR * SUB_IND + (1|HHID), data = train_fold)
+CYEAR * LVST_IND + CYEAR * OTHR_IND + CYEAR * RETIRE_IND + CYEAR * SUB_IND + (1|HHID), data = trimmed_train_fold)
 
 summary(m1)
 ```
 
 ```{r}
-model_score(m1, "m1")
+model_score_trimmed(m1, "m1")
 qqmath(resid(m1))
 plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
 ```
@@ -195,10 +219,10 @@ plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = 
 # m2 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND + GARD_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | HHID),data=df_trimmed, REML = FALSE)
 
 variables_of_interest = c("CYEAR * URBAN", 
-            		        # T1_11_IND*CYEAR+ Beijing
-                        #  "T1_21_IND*CYEAR", Liaoning Baseline
-                         "T1_23_IND*CYEAR",
-                        # "T1_31_IND*CYEAR",
+                         # "T1_21_IND*CYEAR", # Liaoning Baseline
+                         # "T1_11_IND*CYEAR", 
+                         "T1_23_IND*CYEAR", 
+                        # "T1_31_IND*CYEAR", 
                          "T1_32_IND*CYEAR",
                          "T1_37_IND*CYEAR",
                          "T1_41_IND*CYEAR",
@@ -237,14 +261,14 @@ while(TRUE){
   print(current_variables)
   # get baseline
   current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
-  baseline = lmer(current_formula, data=df, REML=FALSE)
+  baseline = lmer(current_formula, data=df_trimmed, REML=FALSE)
   
   # loop through remaining variables of interest and create a new model
   models = c()
   for (var in remaining_variables_of_interest){
     curr_var_loop = c(current_variables, var)
     current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED~ ",paste(curr_var_loop, collapse="+"),sep = ""))
-    new_model = lmer(current_formula, data=df, REML=FALSE)
+    new_model = lmer(current_formula, data=df_trimmed, REML=FALSE)
     models = c(models, new_model)
   }
   
@@ -294,8 +318,8 @@ m3 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR +
             SUB_IND +
             (1 | HHID) +
             CYEAR * URBAN +
-		        # T1_11_IND*CYEAR+ Beijing
             # T1_21_IND*CYEAR+ Lianoning- baseline 
+		        # T1_11_IND*CYEAR+ Beijing
              T1_23_IND*CYEAR+
             #T1_31_IND*CYEAR+ Shanghai
              T1_32_IND*CYEAR+
@@ -320,18 +344,20 @@ lmerTest::step(m3,reduce.fixed = FALSE)
 ```{r}
 step_model = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 + URBAN + BUSINESS_IND + FARM_IND + 
     FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | 
-    HHID) + T1_21_IND + T1_23_IND + T1_31_IND + T1_32_IND + T1_37_IND + 
-    T1_41_IND + T1_42_IND + T1_43_IND + T1_45_IND + T1_52_IND + 
-    T1_55_IND + CYEAR:URBAN + CYEAR:T1_21_IND + CYEAR:T1_32_IND + 
-    CYEAR:T1_37_IND + CYEAR:T1_41_IND + CYEAR:T1_42_IND + CYEAR:T1_43_IND + 
-    CYEAR:T1_45_IND + CYEAR:T1_52_IND + CYEAR:T1_55_IND + T1:URBAN + 
-    CYEAR:BUSINESS_IND + CYEAR:LVST_IND + CYEAR:OTHR_IND + CYEAR:RETIRE_IND + 
-    CYEAR:SUB_IND, data=df_trimmed)
+    HHID) + CYEAR * URBAN + T1_23_IND * CYEAR + T1_32_IND * CYEAR + 
+    T1_37_IND * CYEAR + T1_41_IND * CYEAR + T1_42_IND * CYEAR + 
+    T1_43_IND * CYEAR + T1_45_IND * CYEAR + T1_52_IND * CYEAR + 
+    CYEAR * BUSINESS_IND + CYEAR * FARM_IND + CYEAR * FISH_IND + 
+    CYEAR * LVST_IND + CYEAR * OTHR_IND + CYEAR * RETIRE_IND + 
+    CYEAR * SUB_IND, data=df_trimmed)
 vif(step_model)
 ```
 
 # FINAL MODEL HERE 
 ```{r}
+options(digits=4, scipen=5)
+
+# this is with liaoning as baseline for interactions
 model_final = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + 
     FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | 
     HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND * 
@@ -339,8 +365,9 @@ model_final = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + F
     CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN + 
     CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR + 
     CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df_trimmed)
-summary(model_final)  
-model_score(model_final, "model_final")
+
+summary(model_final)
+model_score_trimmed(model_final, "model_final")
 ```
 
 ```{r}
@@ -354,7 +381,7 @@ vif(model_final)
 ```
 
 ```{r}
-CI_interval = round(confint(model_final), 4)
+CI_interval = confint(model_final)
 exp_CI_interval = exp(CI_interval)
 ```
 
@@ -370,7 +397,201 @@ model_outliers = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND 
 summary(model_outliers)  
 ```
 
+# 3 way interaction
 
+```{r}
+# this will take too long to run
+# 
+variables_of_interest = c("CYEAR * URBAN * T1",
+"CYEAR * URBAN * BUSINESS_IND",
+"CYEAR * URBAN * FARM_IND",
+"CYEAR * URBAN * FISH_IND",
+"CYEAR * URBAN * LVST_IND",
+"CYEAR * URBAN * OTHR_IND",
+"CYEAR * URBAN * RETIRE_IND",
+"CYEAR * URBAN * SUB_IND",
+"CYEAR * T1 * BUSINESS_IND",
+"CYEAR * T1 * FARM_IND",
+"CYEAR * T1 * FISH_IND",
+"CYEAR * T1 * LVST_IND",
+"CYEAR * T1 * OTHR_IND",
+"CYEAR * T1 * RETIRE_IND",
+"CYEAR * T1 * SUB_IND",
+"CYEAR * BUSINESS_IND * FARM_IND",
+"CYEAR * BUSINESS_IND * FISH_IND",
+"CYEAR * BUSINESS_IND * LVST_IND",
+"CYEAR * BUSINESS_IND * OTHR_IND",
+"CYEAR * BUSINESS_IND * RETIRE_IND",
+"CYEAR * BUSINESS_IND * SUB_IND",
+"CYEAR * FARM_IND * FISH_IND",
+"CYEAR * FARM_IND * LVST_IND",
+"CYEAR * FARM_IND * OTHR_IND",
+"CYEAR * FARM_IND * RETIRE_IND",
+"CYEAR * FARM_IND * SUB_IND",
+"CYEAR * FISH_IND * LVST_IND",
+"CYEAR * FISH_IND * OTHR_IND",
+"CYEAR * FISH_IND * RETIRE_IND",
+"CYEAR * FISH_IND * SUB_IND",
+"CYEAR * LVST_IND * OTHR_IND",
+"CYEAR * LVST_IND * RETIRE_IND",
+"CYEAR * LVST_IND * SUB_IND",
+"CYEAR * OTHR_IND * RETIRE_IND",
+"CYEAR * OTHR_IND * SUB_IND",
+"CYEAR * RETIRE_IND * SUB_IND",
+"URBAN * T1 * BUSINESS_IND" #,
+# "URBAN * T1 * FARM_IND",
+# "URBAN * T1 * FISH_IND",
+# "URBAN * T1 * LVST_IND",
+# "URBAN * T1 * OTHR_IND",
+# "URBAN * T1 * RETIRE_IND",
+# "URBAN * T1 * SUB_IND",
+# "URBAN * BUSINESS_IND * FARM_IND",
+# "URBAN * BUSINESS_IND * FISH_IND",
+# "URBAN * BUSINESS_IND * LVST_IND",
+# "URBAN * BUSINESS_IND * OTHR_IND",
+# "URBAN * BUSINESS_IND * RETIRE_IND",
+# "URBAN * BUSINESS_IND * SUB_IND",
+# "URBAN * FARM_IND * FISH_IND",
+# "URBAN * FARM_IND * LVST_IND",
+# "URBAN * FARM_IND * OTHR_IND",
+# "URBAN * FARM_IND * RETIRE_IND",
+# "URBAN * FARM_IND * SUB_IND",
+# "URBAN * FISH_IND * LVST_IND",
+# "URBAN * FISH_IND * OTHR_IND",
+# "URBAN * FISH_IND * RETIRE_IND",
+# "URBAN * FISH_IND * SUB_IND",
+# "URBAN * LVST_IND * OTHR_IND",
+# "URBAN * LVST_IND * RETIRE_IND",
+# "URBAN * LVST_IND * SUB_IND",
+# "URBAN * OTHR_IND * RETIRE_IND",
+# "URBAN * OTHR_IND * SUB_IND",
+# "URBAN * RETIRE_IND * SUB_IND",
+# "T1 * BUSINESS_IND * FARM_IND",
+# "T1 * BUSINESS_IND * FISH_IND",
+# "T1 * BUSINESS_IND * LVST_IND",
+# "T1 * BUSINESS_IND * OTHR_IND",
+# "T1 * BUSINESS_IND * RETIRE_IND",
+# "T1 * BUSINESS_IND * SUB_IND",
+# "T1 * FARM_IND * FISH_IND",
+# "T1 * FARM_IND * LVST_IND",
+# "T1 * FARM_IND * OTHR_IND",
+# "T1 * FARM_IND * RETIRE_IND",
+# "T1 * FARM_IND * SUB_IND",
+# "T1 * FISH_IND * LVST_IND",
+# "T1 * FISH_IND * OTHR_IND",
+# "T1 * FISH_IND * RETIRE_IND",
+# "T1 * FISH_IND * SUB_IND",
+# "T1 * LVST_IND * OTHR_IND",
+# "T1 * LVST_IND * RETIRE_IND",
+# "T1 * LVST_IND * SUB_IND",
+# "T1 * OTHR_IND * RETIRE_IND",
+# "T1 * OTHR_IND * SUB_IND",
+# "T1 * RETIRE_IND * SUB_IND",
+# "BUSINESS_IND * FARM_IND * FISH_IND",
+# "BUSINESS_IND * FARM_IND * LVST_IND",
+# "BUSINESS_IND * FARM_IND * OTHR_IND",
+# "BUSINESS_IND * FARM_IND * RETIRE_IND",
+# "BUSINESS_IND * FARM_IND * SUB_IND",
+# "BUSINESS_IND * FISH_IND * LVST_IND",
+# "BUSINESS_IND * FISH_IND * OTHR_IND",
+# "BUSINESS_IND * FISH_IND * RETIRE_IND",
+# "BUSINESS_IND * FISH_IND * SUB_IND",
+# "BUSINESS_IND * LVST_IND * OTHR_IND",
+# "BUSINESS_IND * LVST_IND * RETIRE_IND",
+# "BUSINESS_IND * LVST_IND * SUB_IND",
+# "BUSINESS_IND * OTHR_IND * RETIRE_IND",
+# "BUSINESS_IND * OTHR_IND * SUB_IND",
+# "BUSINESS_IND * RETIRE_IND * SUB_IND",
+# "FARM_IND * FISH_IND * LVST_IND",
+# "FARM_IND * FISH_IND * OTHR_IND",
+# "FARM_IND * FISH_IND * RETIRE_IND",
+# "FARM_IND * FISH_IND * SUB_IND",
+# "FARM_IND * LVST_IND * OTHR_IND",
+# "FARM_IND * LVST_IND * RETIRE_IND",
+# "FARM_IND * LVST_IND * SUB_IND",
+# "FARM_IND * OTHR_IND * RETIRE_IND",
+# "FARM_IND * OTHR_IND * SUB_IND",
+# "FARM_IND * RETIRE_IND * SUB_IND",
+# "FISH_IND * LVST_IND * OTHR_IND",
+# "FISH_IND * LVST_IND * RETIRE_IND",
+# "FISH_IND * LVST_IND * SUB_IND",
+# "FISH_IND * OTHR_IND * RETIRE_IND",
+# "FISH_IND * OTHR_IND * SUB_IND",
+# "FISH_IND * RETIRE_IND * SUB_IND",
+# "LVST_IND * OTHR_IND * RETIRE_IND",
+# "LVST_IND * OTHR_IND * SUB_IND",
+# "LVST_IND * RETIRE_IND * SUB_IND",
+# "OTHR_IND * RETIRE_IND * SUB_IND"
+)
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("URBAN",
+"T1",
+"BUSINESS_IND",
+"FARM_IND",
+"FISH_IND",
+"LVST_IND",
+"OTHR_IND",
+"RETIRE_IND",
+"SUB_IND",
+"(1 | HHID)",
+"CYEAR * RETIRE_IND",
+"T1_23_IND * CYEAR",
+"T1_32_IND * CYEAR",
+"CYEAR * BUSINESS_IND",
+"T1_45_IND * CYEAR",
+"T1_41_IND * CYEAR",
+"T1_43_IND * CYEAR",
+"T1_37_IND * CYEAR",
+"CYEAR * URBAN",
+"CYEAR * SUB_IND",
+"T1_52_IND * CYEAR",
+"T1_42_IND * CYEAR",
+"CYEAR * LVST_IND",
+"CYEAR * OTHR_IND")
+current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df_trimmed, REML=FALSE)
+
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df_trimmed, REML=FALSE)
+    models = c(models, new_model)
+  }
+
+  # perform anova on baseline and a new model, record the resulting p-value
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+
+  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
 
 
 
