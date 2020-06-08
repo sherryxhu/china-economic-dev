@@ -890,5 +890,43 @@ while(TRUE){
 }
 ```
 
+# Model with Outliers
+```{r}
+model_outliers = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + 
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | 
+    HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND * 
+    CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + T1_41_IND * 
+    CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN + 
+    CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR + 
+    CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df)
+```
+
+```{r}
+final.coef = coef(summary(model_final))[ , "Estimate"]
+exp.final.coef = exp(coef(summary(model_final))[ , "Estimate"])
+outliers.coef = coef(summary(model_outliers))[ , "Estimate"]
+exp.outlier.coef = exp(coef(summary(model_outliers))[ , "Estimate"])
+
+CI_interval.final = confint(model_final)
+exp_CI_interval.final = exp(CI_interval.final)
+test.final = exp_CI_interval.final[-3,]
+
+CI_interval = confint(model_outliers)
+exp_CI_interval = exp(CI_interval)
+test.outliers = exp_CI_interval[-3,]
+```
+
+```{r}
+comparison <- cbind(coef_final = final.coef, coef_outlers = outliers.coef,exp_final_coef = exp.final.coef,exp_outlier_coec = exp.outlier.coef)
+knitr::kable(comparison , digits = 4,format = "latex")
+```
+
+```{r}
+outliers.coef
+```
+
+```{r}
+print(exp.outlier.coef,digits = 4)
+```
 
 
