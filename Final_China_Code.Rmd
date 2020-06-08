@@ -8,7 +8,7 @@ output: html_document
 ```{r library}
 # libraries that need to be installed and loaded
 library(tidyverse)
-library(mice)
+library(dplyr)
 library(reshape2)
 library(ggplot2)
 library(lme4)
@@ -159,6 +159,27 @@ df_trimmed$LOG_THOUSANDS_SHIFTED = log(df_trimmed$THOUSANDS_SHIFTED)
 df$THOUSANDS_SHIFTED =df$THOUSANDS - (min(df$THOUSANDS)-1)
 df$LOG_THOUSANDS_SHIFTED = log(df$THOUSANDS_SHIFTED)
 ```
+
+#Justification for Log Transformation
+```{r}
+og_income <- df_trimmed %>% 
+  dplyr::group_by(WAVE) %>% 
+  dplyr::summarise(og_mean_inc = mean(HHINCPC_CPI))
+ggplot(og_income, aes(x=WAVE, y=og_mean_inc)) +
+  geom_point() +
+  labs(title = "Mean Per Capita Household Income by Year",
+       x = "Year",
+       y = "Yuan")
+
+log_income <- og_income %>% 
+  mutate(log_mean_income = log(og_mean_inc))
+ggplot(log_income, aes(x=WAVE, y=log_mean_income)) +
+  geom_point() +
+  labs(title = "Log Mean Per Capita Household Income by Year",
+       x = "Year",
+       y = "Log(Yuan)")
+```
+
 
 # Initial Model 
 
