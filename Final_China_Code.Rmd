@@ -1028,6 +1028,11 @@ test_results_table
 
 #Changes in household income by income source
 ```{r}
+yrs <- c(0,2,4,8,11,15,17,20,22,26)
+xvar <- c("1989", "1991", "1993", "1997", "2000", "2004", "2006", "2009", "2011", "2015")
+estimate <- as.data.frame(summary(model_final)$coefficients)
+estimate <- estimate %>% dplyr::select(Estimate)
+
 for (i in yrs) {
   bus <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["BUSINESS_IND1",]+yrs*estimate["CYEAR:BUSINESS_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
   d <- data.frame(bus)
@@ -1087,45 +1092,40 @@ plot1 <- ggplot(mdf1, aes(x=xvar, y=value, group=variable, color=variable)) +
 
 #Changes in household income by province
 ```{r}
-yrs <- c(0,2,4,8,11,15,17,20,22,26)
-xvar <- c("1989", "1991", "1993", "1997", "2000", "2004", "2006", "2009", "2011", "2015")
-estimate <- as.data.frame(summary(model_final)$coefficients)
-estimate <- estimate %>% dplyr::select(Estimate)
-
 for (i in yrs) {
-  prov21 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T121",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
-  df7 <- data.frame(prov21)
+  prov21 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df7 <- data.frame(prov23)
 }
 for (i in yrs) {
-  prov23 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T123",]+yrs*estimate["CYEAR:T1_23_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
-  df8 <- data.frame(prov23)
+  prov23 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_23_IND1",]+yrs*estimate["CYEAR:T1_23_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df8 <- data.frame(prov21)
 }
 for (i in yrs) {
-  prov32 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T132",]+yrs*estimate["CYEAR:T1_32_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  prov32 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_32_IND1",]+yrs*estimate["CYEAR:T1_32_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
   df10 <- data.frame(prov32)
 }
 for (i in yrs) {
-  prov37 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T137",]+yrs*estimate["CYEAR:T1_37_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  prov37 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_37_IND1",]+yrs*estimate["CYEAR:T1_37_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
   df11 <- data.frame(prov37)
 }
 for (i in yrs) {
-  prov41 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T141",]+yrs*estimate["CYEAR:T1_41_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  prov41 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_41_IND1",]+yrs*estimate["CYEAR:T1_41_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
   df12 <- data.frame(prov41)
 }
 for (i in yrs) {
-  prov42 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T142",]+yrs*estimate["CYEAR:T1_42_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  prov42 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_42_IND1",]+yrs*estimate["CYEAR:T1_42_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
   df13 <- data.frame(prov42)
 }
 for (i in yrs) {
-  prov43 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T143",]+yrs*estimate["CYEAR:T1_43_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  prov43 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_43_IND1",]+yrs*estimate["CYEAR:T1_43_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
   df14 <- data.frame(prov43)
 }
 for (i in yrs) {
-  prov45 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T145",]+yrs*estimate["CYEAR:T1_45_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  prov45 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_45_IND1",]+yrs*estimate["CYEAR:T1_45_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
   df15 <- data.frame(prov45)
 }
 for (i in yrs) {
-  prov52 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T152",]+yrs*estimate["CYEAR:T1_52_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  prov52 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_52_IND1",]+yrs*estimate["CYEAR:T1_52_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
   df16 <- data.frame(prov52)
 }
 
