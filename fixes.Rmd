@@ -198,13 +198,9 @@ model_score_trimmed = function(model, model_name){
 
 ```{r}
 # initial model
-# considers main effects and 2-way interactions with CYEAR in it
 # random effect for household 
 # gardening is the baseline for income source
-m1 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND +  LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + CYEAR*URBAN + #T1_21_IND*CYEAR +#
-T1_23_IND*CYEAR + T1_32_IND*CYEAR + T1_41_IND*CYEAR + T1_42_IND*CYEAR + T1_43_IND*CYEAR + T1_45_IND*CYEAR + T1_52_IND*CYEAR + CYEAR * BUSINESS_IND + CYEAR * FARM_IND + CYEAR * FISH_IND +
-CYEAR * LVST_IND + CYEAR * OTHR_IND + CYEAR * RETIRE_IND + CYEAR * SUB_IND + (1|HHID), data = trimmed_train_fold)
-
+m1 = lmer(THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND +  LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1|HHID), data = df_trimmed)
 summary(m1)
 ```
 
@@ -214,10 +210,9 @@ qqmath(resid(m1))
 plot(m1,resid(.,scaled=TRUE)~fitted(.),abline=0, xlab = "Fitted Values", ylab = "Residuals")
 ```
 
-# Model Selection
-```{r}
-# m2 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND + GARD_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | HHID),data=df_trimmed, REML = FALSE)
+# Model Selection on only cyear interaction effects
 
+```{r}
 variables_of_interest = c("CYEAR * URBAN", 
                          # "T1_21_IND*CYEAR", # Liaoning Baseline
                          # "T1_11_IND*CYEAR", 
@@ -358,7 +353,21 @@ vif(step_model)
 options(digits=4, scipen=5)
 
 # this is with liaoning as baseline for interactions
-model_final = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + 
+model_final = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + 
+                     #T1 +
+#T1_21_IND+
+T1_11_IND+
+T1_23_IND+
+T1_31_IND+
+T1_32_IND+
+T1_37_IND+
+T1_41_IND+
+T1_42_IND+
+T1_43_IND+
+T1_45_IND+
+T1_52_IND+
+T1_55_IND+ 
+  BUSINESS_IND + FARM_IND + 
     FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | 
     HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND * 
     CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + T1_41_IND * 
@@ -395,6 +404,294 @@ model_outliers = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND 
     CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR + 
     CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df)
 summary(model_outliers)  
+```
+
+
+# model selection for cyear^2
+```{r}
+variables_of_interest = c("CYEAR * URBAN", 
+                         # "T1_21_IND*CYEAR", # Liaoning Baseline
+                         # "T1_11_IND*CYEAR", 
+                         "T1_23_IND*CYEAR", 
+                        # "T1_31_IND*CYEAR", 
+                         "T1_32_IND*CYEAR",
+                         "T1_37_IND*CYEAR",
+                         "T1_41_IND*CYEAR",
+                         "T1_42_IND*CYEAR",
+                         "T1_43_IND*CYEAR",
+                         "T1_45_IND*CYEAR",
+                         "T1_52_IND*CYEAR",
+                        # "T1_55_IND*CYEAR",
+                          "CYEAR * BUSINESS_IND",
+                          "CYEAR * FARM_IND", 
+                          "CYEAR * FISH_IND",
+                         # "CYEAR * GARD_IND",
+                          "CYEAR * LVST_IND",
+                          "CYEAR * OTHR_IND", 
+                          "CYEAR * RETIRE_IND",
+                          "CYEAR * SUB_IND",
+                          "CYEAR^2")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("CYEAR",
+                      "URBAN",
+                      "T1",
+                      "BUSINESS_IND",
+                      "FARM_IND", 
+                      "FISH_IND",
+                      # "GARD_IND",
+                      "LVST_IND",
+                      "OTHR_IND", 
+                      "RETIRE_IND",
+                      "SUB_IND",
+                      "(1|HHID)")
+current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df_trimmed, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df_trimmed, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  # perform anova on baseline and a new model, record the resulting p-value
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+```{r}
+selected_model = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+selected_model
+```
+it didn't select cyear^2
+
+# model selection for cyear^3
+```{r}
+variables_of_interest = c("CYEAR * URBAN", 
+                         # "T1_21_IND*CYEAR", # Liaoning Baseline
+                         # "T1_11_IND*CYEAR", 
+                         "T1_23_IND*CYEAR", 
+                        # "T1_31_IND*CYEAR", 
+                         "T1_32_IND*CYEAR",
+                         "T1_37_IND*CYEAR",
+                         "T1_41_IND*CYEAR",
+                         "T1_42_IND*CYEAR",
+                         "T1_43_IND*CYEAR",
+                         "T1_45_IND*CYEAR",
+                         "T1_52_IND*CYEAR",
+                        # "T1_55_IND*CYEAR",
+                          "CYEAR * BUSINESS_IND",
+                          "CYEAR * FARM_IND", 
+                          "CYEAR * FISH_IND",
+                         # "CYEAR * GARD_IND",
+                          "CYEAR * LVST_IND",
+                          "CYEAR * OTHR_IND", 
+                          "CYEAR * RETIRE_IND",
+                          "CYEAR * SUB_IND",
+                          "CYEAR^2","CYEAR^3")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("CYEAR",
+                      "URBAN",
+                      "T1",
+                      "BUSINESS_IND",
+                      "FARM_IND", 
+                      "FISH_IND",
+                      # "GARD_IND",
+                      "LVST_IND",
+                      "OTHR_IND", 
+                      "RETIRE_IND",
+                      "SUB_IND",
+                      "(1|HHID)")
+current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df_trimmed, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df_trimmed, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  # perform anova on baseline and a new model, record the resulting p-value
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+```{r}
+selected_model = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+selected_model
+```
+it didn't select cyear^2
+
+# all 2 way interaction effects
+
+```{r}
+variables_of_interest = c("CYEAR * URBAN",
+"CYEAR * T1",
+"CYEAR * BUSINESS_IND",
+"CYEAR * FARM_IND",
+"CYEAR * FISH_IND",
+"CYEAR * LVST_IND",
+"CYEAR * OTHR_IND",
+"CYEAR * RETIRE_IND",
+"CYEAR * SUB_IND",
+"URBAN * T1",
+"URBAN * BUSINESS_IND",
+"URBAN * FARM_IND",
+"URBAN * FISH_IND",
+"URBAN * LVST_IND",
+"URBAN * OTHR_IND",
+"URBAN * RETIRE_IND",
+"URBAN * SUB_IND",
+"T1 * BUSINESS_IND",
+"T1 * FARM_IND",
+"T1 * FISH_IND",
+"T1 * LVST_IND",
+"T1 * OTHR_IND",
+"T1 * RETIRE_IND",
+"T1 * SUB_IND",
+"BUSINESS_IND * FARM_IND",
+"BUSINESS_IND * FISH_IND",
+"BUSINESS_IND * LVST_IND",
+"BUSINESS_IND * OTHR_IND",
+"BUSINESS_IND * RETIRE_IND",
+"BUSINESS_IND * SUB_IND",
+"FARM_IND * FISH_IND",
+"FARM_IND * LVST_IND",
+"FARM_IND * OTHR_IND",
+"FARM_IND * RETIRE_IND",
+"FARM_IND * SUB_IND",
+"FISH_IND * LVST_IND",
+"FISH_IND * OTHR_IND",
+"FISH_IND * RETIRE_IND",
+"FISH_IND * SUB_IND",
+"LVST_IND * OTHR_IND",
+"LVST_IND * RETIRE_IND",
+"LVST_IND * SUB_IND",
+"OTHR_IND * RETIRE_IND",
+"OTHR_IND * SUB_IND",
+"RETIRE_IND * SUB_IND")
+
+remaining_variables_of_interest = variables_of_interest
+
+current_variables = c("CYEAR",
+                      "URBAN",
+                      "T1",
+                      "BUSINESS_IND",
+                      "FARM_IND", 
+                      "FISH_IND",
+                      # "GARD_IND",
+                      "LVST_IND",
+                      "OTHR_IND", 
+                      "RETIRE_IND",
+                      "SUB_IND",
+                      "(1|HHID)")
+current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+
+while(TRUE){
+  print("current baseline")
+  print(current_variables)
+  # get baseline
+  current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+  baseline = lmer(current_formula, data=df_trimmed, REML=FALSE)
+  
+  # loop through remaining variables of interest and create a new model
+  models = c()
+  for (var in remaining_variables_of_interest){
+    curr_var_loop = c(current_variables, var)
+    current_formula = as.formula(paste("LOG_THOUSANDS_SHIFTED~ ",paste(curr_var_loop, collapse="+"),sep = ""))
+    new_model = lmer(current_formula, data=df_trimmed, REML=FALSE)
+    models = c(models, new_model)
+  }
+  
+  # perform anova on baseline and a new model, record the resulting p-value
+  p_vals = c()
+  for (m in models){
+    anova_result = anova(baseline, m)
+    p_vals= c(p_vals, anova_result$`Pr(>Chisq)`[2])
+  }
+  
+  # if the smallest p-value is greater than 0.05, stop because no new variable is significant
+  if (min(p_vals)>0.05){
+    print("no remaining significant variables of interest")
+    break
+  }
+  print(paste("selected", remaining_variables_of_interest[which.min(p_vals)], ", p-value of", min(p_vals) ))
+  
+  # add most signficant variable to model
+  current_variables = c(current_variables, remaining_variables_of_interest[which.min(p_vals)])
+  
+  # remove the most significant variable from search space
+  remaining_variables_of_interest = remaining_variables_of_interest[-which.min(p_vals)]
+  if (length(remaining_variables_of_interest)==0){
+    break
+  }
+}
+```
+
+```{r}
+all_two_way = as.formula(paste("LOG_THOUSANDS_SHIFTED ~ ",paste(current_variables, collapse="+"),sep = ""))
+all_two_way
 ```
 
 # 3 way interaction
