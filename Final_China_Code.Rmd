@@ -1094,11 +1094,11 @@ plot1 <- ggplot(mdf1, aes(x=xvar, y=value, group=variable, color=variable)) +
 ```{r}
 for (i in yrs) {
   prov21 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
-  df7 <- data.frame(prov23)
+  df7 <- data.frame(prov21)
 }
 for (i in yrs) {
   prov23 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_23_IND1",]+yrs*estimate["CYEAR:T1_23_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
-  df8 <- data.frame(prov21)
+  df8 <- data.frame(prov23)
 }
 for (i in yrs) {
   prov32 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T1_32_IND1",]+yrs*estimate["CYEAR:T1_32_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
