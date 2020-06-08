@@ -870,6 +870,43 @@ for(i in 1:test_size){
 ```
 
 ```{r}
+no_transform_MSEs = c()
+sqrt_transform_MSEs = c()
+sq_transform_MSEs = c()
+set.seed(0)
+
+for(i in 1:test_size){
+  HHIDs = sample(HHIDs)
+  # split into train and test folds
+  test_indices = seq(i, length(HHIDs), test_size)
+  train_fold_HHIDs = HHIDs[-test_indices]
+  test_fold_HHIDs = HHIDs[test_indices]
+  
+  train_fold = df[df$HHID %in% train_fold_HHIDs,]
+  test_fold = df[df$HHID %in% test_fold_HHIDs,]
+  
+  #no transformation on response variable
+  predictions = predict(SAmodel1, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  no_transform_MSEs = c(no_transform_MSEs, MSE)
+  
+  #square root transformation on response variable
+  predictions = predict(SAmodel2, test_fold, allow.new.levels=TRUE)
+  residuals = (predictions^2) - (test_fold$THOUSANDS_SHIFTED)
+  MSE = mean(residuals^2)
+  sqrt_transform_MSEs = c(sqrt_transform_MSEs, MSE)
+  
+  #squared transformation on response variable
+  predictions = predict(SAmodel3, test_fold, allow.new.levels=TRUE)
+  residuals = (sqrt(predictions)) - (test_fold$THOUSANDS)
+  MSE = mean(residuals^2)
+  sq_transform_MSEs = c(sq_transform_MSEs, MSE)
+  
+}
+```
+
+```{r}
 mean(our_MSEs)
 sd(our_MSEs)
 
@@ -879,8 +916,211 @@ sd(two_way_MSEs)
 mean(three_way_MSEs)
 sd(three_way_MSEs)
 
-# mean(four_way_MSEs)
-# sd(four_way_MSEs)
+mean(four_way_MSEs)
+sd(four_way_MSEs)
+
+mean(no_transform_MSEs)
+sd(no_transform_MSEs)
+
+mean(sqrt_transform_MSEs)
+sd(sqrt_transform_MSEs)
+
+mean(sq_transform_MSEs)
+sd(sq_transform_MSEs)
+
+```
+
+# Interpretation of beta coefficients
+
+```{r}
+#full model with all variables in final model
+test_full <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 |  
+    HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND *  
+    CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + T1_41_IND *  
+    CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN +  
+    CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR +  
+    CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df_trimmed, REML=FALSE)
+
+#model without province interaction terms
+provtest_reduced <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1|HHID) + CYEAR * RETIRE_IND + CYEAR * BUSINESS_IND + CYEAR *  
+    URBAN + CYEAR * SUB_IND + CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df_trimmed, REML=FALSE)
+
+#model without urban interaction terms
+urbtest_reduced <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 |  
+    HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND * CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + 
+      T1_41_IND * CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR +  
+      CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df_trimmed, REML=FALSE)
+
+#model without income source interaction terms
+incsource_reduced <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1|HHID) + T1_23_IND * CYEAR + T1_32_IND * CYEAR + 
+    T1_45_IND * CYEAR + T1_41_IND * CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN +  
+    T1_52_IND * CYEAR + T1_42_IND * CYEAR, data=df_trimmed, REML=FALSE)
+
+#model without cyear interaction terms
+year_reduced <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 |  
+    HHID), data=df_trimmed, REML=FALSE)
+
+prov_test <- anova(test_full, provtest_reduced)
+urb_test <- anova(test_full, urbtest_reduced)
+incsource_test <- anova(test_full, incsource_reduced)
+year_test <- anova(test_full, year_reduced)
+test_results <- rbind(prov_test, urb_test, incsource_test, year_test)
+test_results_table <- kable(test_results, caption="Likelihood Ratio Test", align="c")
+test_results_table
+```
+
+#Changes in household income by income source
+```{r}
+for (i in yrs) {
+  bus <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["BUSINESS_IND1",]+yrs*estimate["CYEAR:BUSINESS_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  d <- data.frame(bus)
+}
+
+for (i in yrs) {
+  farm <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["FARM_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  df0 <- data.frame(farm)
+}
+
+for (i in yrs) {
+  fish <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["FISH_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  df1 <- data.frame(fish)
+}
+
+for (i in yrs) {
+  gard <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  df2 <- data.frame(gard)
+}
+
+for (i in yrs) {
+  lvst <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["LVST_IND1",]+yrs*estimate["CYEAR:LVST_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  df3 <- data.frame(lvst)
+}
+
+for (i in yrs) {
+  othr <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["OTHR_IND1",]+yrs*estimate["CYEAR:OTHR_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  df4 <- data.frame(othr)
+}
+
+for (i in yrs) {
+  retire <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["RETIRE_IND1",]+yrs*estimate["CYEAR:RETIRE_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  df5 <- data.frame(retire)
+}
+
+for (i in yrs) {
+  sub <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["SUB_IND1",]+yrs*estimate["CYEAR:SUB_IND1",])-(abs(min(df_trimmed$THOUSANDS))+0.01)
+  df6 <- data.frame(sub)
+}
+
+source.data <- cbind(xvar, d, df0, df1, df2, df3, df4, df5, df6)
+source.data$xvar <- as.numeric(as.character(source.data$xvar))
+mdf1 <- melt(source.data, id.vars="xvar")
+
+plot1 <- ggplot(mdf1, aes(x=xvar, y=value, group=variable, color=variable)) + 
+  geom_line(aes(color=variable)) +
+  geom_point() +
+  scale_color_discrete(name="Income \nSource",
+                       labels=c("Business","Farming", "Fishing", "Gardening", "Livestock", "Others", "Retirement", "Subsidies")) +
+  labs(title="4a: Changes in Household Income per Capita \nOver Time by Income Source",
+       x="Year",
+       y="Expected Income (thousands)") +
+    theme(plot.title = element_text(size=20),
+          legend.position = "bottom",
+          text = element_text(size=15))
+```
+
+#Changes in household income by province
+```{r}
+yrs <- c(0,2,4,8,11,15,17,20,22,26)
+xvar <- c("1989", "1991", "1993", "1997", "2000", "2004", "2006", "2009", "2011", "2015")
+estimate <- as.data.frame(summary(model_final)$coefficients)
+estimate <- estimate %>% dplyr::select(Estimate)
+
+for (i in yrs) {
+  prov21 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T121",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df7 <- data.frame(prov21)
+}
+for (i in yrs) {
+  prov23 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T123",]+yrs*estimate["CYEAR:T1_23_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df8 <- data.frame(prov23)
+}
+for (i in yrs) {
+  prov32 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T132",]+yrs*estimate["CYEAR:T1_32_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df10 <- data.frame(prov32)
+}
+for (i in yrs) {
+  prov37 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T137",]+yrs*estimate["CYEAR:T1_37_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df11 <- data.frame(prov37)
+}
+for (i in yrs) {
+  prov41 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T141",]+yrs*estimate["CYEAR:T1_41_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df12 <- data.frame(prov41)
+}
+for (i in yrs) {
+  prov42 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T142",]+yrs*estimate["CYEAR:T1_42_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df13 <- data.frame(prov42)
+}
+for (i in yrs) {
+  prov43 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T143",]+yrs*estimate["CYEAR:T1_43_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df14 <- data.frame(prov43)
+}
+for (i in yrs) {
+  prov45 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T145",]+yrs*estimate["CYEAR:T1_45_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df15 <- data.frame(prov45)
+}
+for (i in yrs) {
+  prov52 <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T152",]+yrs*estimate["CYEAR:T1_52_IND1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df16 <- data.frame(prov52)
+}
+
+prov.data <- cbind(xvar, df7, df8, df10, df11, df12, df13, df14, df15, df16)
+prov.data$xvar <- as.numeric(as.character(prov.data$xvar))
+mdf2 <- melt(prov.data, id.vars="xvar")
+
+plot2 <- ggplot(mdf2, aes(x=xvar, y=value, group=variable, color=variable)) + 
+  geom_line() +
+  geom_point() +
+  scale_color_discrete(name="Province",
+                       labels=c("Liaoning", "Heilongjiang", "Jiangsu", "Shandong", "Henan", "Hubei", "Hunan", "Guangxi", "Guizhou")) +
+  labs(title= "4b: Changes in Household Income per Capita \nOver Time by Province",
+       x="Year",
+       y="Expected Income (thousands)") +
+    theme(plot.title = element_text(size=20),
+          legend.position = "bottom",
+          text = element_text(size=15))
+plot2
+```
+
+#Changes in household income by urban/rural status
+```{r}
+for (i in yrs) {
+  urb <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["URBAN1",]+estimate["CYEAR:URBAN1",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df19 <- data.frame(urb)
+}
+for (i in yrs) {
+  rur <- exp(estimate["(Intercept)",]+yrs*estimate["CYEAR",]) - (abs(min(df_trimmed$THOUSANDS))+0.01)
+  df20 <- data.frame(rur)
+}
+
+urb.data <- cbind(xvar, df19, df20)
+urb.data$xvar <- as.numeric(as.character(urb.data$xvar))
+mdf3 <- melt(urb.data, id.vars="xvar")
+
+plot3 <- ggplot(mdf3, aes(x=xvar, y=value, group=variable, color=variable)) +
+  geom_line() +
+  geom_point() +
+  scale_color_discrete(name="Status",
+                       labels=c("Urban", "Rural")) +
+  labs(title="4c: Changes in Household Income per Capita \nOver Time by Urban/Rural Status",
+       x="Year",
+       y="Expected Income (thousands)") +
+  theme(plot.title = element_text(size=20),
+        legend.position = "bottom",
+        text = element_text(size=15))
 
 ```
 
@@ -1085,230 +1325,3 @@ ggplot(ratio.years.primary,aes(x = WAVE,y = ratio)) +
   facet_wrap(~PRIMARY)
 ```
 
-# Beta coefficient test
-```{r}
-library(gridExtra)
-#coefs <- names(fixef(model_final))
-# #year
-#coeftest_year <- linearHypothesis(model_final, "CYEAR=0")
-# #urban/rural
-# coeftest_urban <- linearHypothesis(final_model, "URBAN1=0")
-# #province
-# coeftest_province <- linearHypothesis(final_model, coefs[4:14])
-# #primary
-# coeftest_primary <- linearHypothesis(final_model, coefs[15:21])
-# #year:primary
-# coeftest_yearprimary <- linearHypothesis(final_model, coefs[22:28])
-# #year:urban
-# coeftest_yearurban <- linearHypothesis(final_model, coefs[29])
-# #year:province
-# coeftest_yearprovince <- linearHypothesis(final_model, coefs[30:40])
-# #urban:province
-# coeftest_urbanprovince <- linearHypothesis(final_model, coefs[41:51])
-#  
-# 
-# coeftest <- na.omit(rbind(coeftest_year, coeftest_urban, coeftest_province, coeftest_primary, coeftest_yearprimary, coeftest_yearurban, coeftest_yearprovince, coeftest_urbanprovince))
-# var <- c("Year","Urban", "Province", "Primary Income Source", "Year:Primary Source", "Year:Urban", "Year:Province", "Urban:Province")
-# coeftest <- cbind(var, coeftest)
-# kable(coeftest, col.names = c("Variable", "Degrees of Freedom", "Chi-squared", "p-value"), caption="Hypothesis Testing of Urban Coefficients",align="c")
-# 
-# png("beta-test.png")
-# p <- tableGrob(coeftest)
-# grid.arrange(p)
-# dev.off()
-
-#test provinces
-test_full <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
-    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 |  
-    HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND *  
-    CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + T1_41_IND *  
-    CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN +  
-    CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR +  
-    CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df_trimmed, REML=FALSE)
-
-provtest_reduced <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
-    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1|HHID) + CYEAR * RETIRE_IND + CYEAR * BUSINESS_IND + CYEAR *  
-    URBAN + CYEAR * SUB_IND + CYEAR * LVST_IND + CYEAR * OTHR_IND, data=df_trimmed, REML=FALSE)
-
-urbtest_reduced <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
-    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 |  
-    HHID) + 
-      CYEAR * RETIRE_IND + 
-      T1_23_IND * CYEAR + 
-      T1_32_IND * CYEAR + 
-      CYEAR * BUSINESS_IND + 
-      T1_45_IND * CYEAR + 
-      T1_41_IND * CYEAR + 
-      T1_43_IND * CYEAR + 
-      T1_37_IND * CYEAR + 
-      CYEAR * SUB_IND + 
-      T1_52_IND * CYEAR + 
-      T1_42_IND * CYEAR +  
-      CYEAR * LVST_IND + 
-      CYEAR * OTHR_IND, data=df_trimmed, REML=FALSE)
-
-incsource_reduced <- lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
-    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1|HHID) + T1_23_IND * CYEAR + T1_32_IND * CYEAR + 
-    T1_45_IND * CYEAR + T1_41_IND * CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN +  
-    T1_52_IND * CYEAR + T1_42_IND * CYEAR, data=df_trimmed, REML=FALSE)
-
-prov_test <- anova(test_full, provtest_reduced)
-urb_test <- anova(test_full, urbtest_reduced)
-incsource_test <- anova(test_full, incsource_reduced)
-test_results <- kable(round(rbind(prov_test, urb_test, incsource_test), digits=3), caption="Likelihood Ratio Test", align="c")
-test_results
-```
-
-#Variation in household income by province
-```{r}
-yrs <- c(0,2,4,8,11,15,17,20,22,26)
-xvar <- c("1989", "1991", "1993", "1997", "2000", "2004", "2006", "2009", "2011", "2015")
-estimate <- as.data.frame(summary(final_model)$coefficients)
-estimate <- estimate %>% dplyr::select(Estimate)
-
-for (i in yrs) {
-  prov21 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T121",]+yrs*estimate["CYEAR:T121",]
-  df7 <- data.frame(prov21)
-}
-for (i in yrs) {
-  prov23 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T123",]+yrs*estimate["CYEAR:T123",]
-  df8 <- data.frame(prov23)
-}
-for (i in yrs) {
-  prov31 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T131",]+yrs*estimate["CYEAR:T131",]
-  df9 <- data.frame(prov31)
-}
-for (i in yrs) {
-  prov32 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T132",]+yrs*estimate["CYEAR:T132",]
-  df10 <- data.frame(prov32)
-}
-for (i in yrs) {
-  prov37 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T137",]+yrs*estimate["CYEAR:T137",]
-  df11 <- data.frame(prov37)
-}
-for (i in yrs) {
-  prov41 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T141",]+yrs*estimate["CYEAR:T141",]
-  df12 <- data.frame(prov41)
-}
-for (i in yrs) {
-  prov42 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T142",]+yrs*estimate["CYEAR:T142",]
-  df13 <- data.frame(prov42)
-}
-for (i in yrs) {
-  prov43 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T143",]+yrs*estimate["CYEAR:T143",]
-  df14 <- data.frame(prov43)
-}
-for (i in yrs) {
-  prov45 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T145",]+yrs*estimate["CYEAR:T145",]
-  df15 <- data.frame(prov45)
-}
-for (i in yrs) {
-  prov52 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T152",]+yrs*estimate["CYEAR:T152",]
-  df16 <- data.frame(prov52)
-}
-for (i in yrs) {
-  prov55 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["T155",]+yrs*estimate["CYEAR:T155",]
-  df17 <- data.frame(prov55)
-}
-for (i in yrs) {
-  prov11 <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]
-  df18 <- data.frame(prov11)
-}
-
-prov.data <- cbind(xvar, df18, df7, df8, df9, df10, df11, df12, df13, df14, df15, df16, df17)
-prov.data$xvar <- as.numeric(as.character(prov.data$xvar))
-mdf2 <- melt(prov.data, id.vars="xvar")
-
-plot2 <- ggplot(mdf2, aes(x=xvar, y=value, group=variable, color=variable)) + 
-  geom_line() +
-  geom_point() +
-  scale_color_discrete(name="Province",
-                       labels=c("Beijing", "Liaoning", "Heilongjiang", "Shanghai", "Jiangsu", "Shandong", "Henan", "Hubei", "Hunan", "Guangxi", "Guizhou", "Chongqing")) +
-  labs(title="Changes in Household Income per Capita Over Time \nby Province",
-       x="Year",
-       y="Beta coefficients") +
-    theme(plot.title = element_text(size=20))
-```
-
-#Variation in household income by urban/rural status
-```{r}
-for (i in yrs) {
-  urb <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["URBAN1",]+estimate["URBAN1:CYEAR",]
-  df19 <- data.frame(urb)
-}
-for (i in yrs) {
-  rur <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]
-  df20 <- data.frame(rur)
-}
-
-urb.data <- cbind(xvar, df19, df20)
-urb.data$xvar <- as.numeric(as.character(urb.data$xvar))
-mdf3 <- melt(urb.data, id.vars="xvar")
-
-plot3 <- ggplot(mdf3, aes(x=xvar, y=value, group=variable, color=variable)) +
-  geom_line() +
-  geom_point() +
-  scale_color_discrete(name="Status",
-                       labels=c("Urban", "Rural")) +
-  labs(title="Changes in Household Income per Capita Over Time \nby Urban/Rural Status",
-       x="Year",
-       y="Beta coefficients") +
-  theme(plot.title = element_text(size=20))
-```
-
-#Variation in household income by income source
-```{r}
-for (i in yrs) {
-  bus <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]
-  d <- data.frame(bus)
-}
-
-for (i in yrs) {
-  farm <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHFARM",]+yrs*estimate["CYEAR:PRIMARYHHFARM",]
-  df0 <- data.frame(farm)
-}
-
-for (i in yrs) {
-  fish <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHFISH",]+yrs*estimate["CYEAR:PRIMARYHHFISH",]
-  df1 <- data.frame(fish)
-}
-
-for (i in yrs) {
-  gard <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHGARD",]+yrs*estimate["CYEAR:PRIMARYHHGARD",]
-  df2 <- data.frame(gard)
-}
-
-for (i in yrs) {
-  lvst <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHLVST",]+yrs*estimate["CYEAR:PRIMARYHHLVST",]
-  df3 <- data.frame(lvst)
-}
-
-for (i in yrs) {
-  othr <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHOTHR",]+yrs*estimate["CYEAR:PRIMARYHHOTHR",]
-  df4 <- data.frame(othr)
-}
-
-for (i in yrs) {
-  retire <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHRETIRE",]+yrs*estimate["CYEAR:PRIMARYHHRETIRE",]
-  df5 <- data.frame(retire)
-}
-
-for (i in yrs) {
-  sub <- estimate["(Intercept)",]+yrs*estimate["CYEAR",]+estimate["PRIMARYHHSUB",]+yrs*estimate["CYEAR:PRIMARYHHSUB",]
-  df6 <- data.frame(sub)
-}
-
-source.data <- cbind(xvar, d, df0, df1, df2, df3, df4, df5, df6)
-source.data$xvar <- as.numeric(as.character(source.data$xvar))
-mdf1 <- melt(source.data, id.vars="xvar")
-
-plot1 <- ggplot(mdf1, aes(x=xvar, y=value, group=variable, color=variable)) + 
-  geom_line(aes(color=variable)) +
-  geom_point() +
-  scale_color_discrete(name="Income Source",
-                       labels=c("Business","Farming", "Fishing", "Gardening", "Livestock", "Others", "Retirement", "Subsidies")) +
-  labs(title="Changes in Household Income per Capita Over Time \nby Primary Income Source",
-       x="Year",
-       y="Beta coefficients") +
-    theme(plot.title = element_text(size=20))
-```
