@@ -165,7 +165,8 @@ df$LOG_THOUSANDS_SHIFTED = log(df$THOUSANDS_SHIFTED)
 
 ```{r initial_Model}
 # fit model with main effects
-m1 = lmer(LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND +  LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1|HHID), data = df_trimmed)
+m1_formula = as.formula("LOG_THOUSANDS_SHIFTED ~ CYEAR + T1 +  URBAN + BUSINESS_IND + FARM_IND + FISH_IND +  LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1|HHID)")
+m1 = lmer( m1_formula, data = df_trimmed)
 summary(m1)
 ```
 
@@ -734,7 +735,7 @@ The following code performs model selection on all three-way interaction effects
 # 
 # remaining_variables_of_interest = variables_of_interest
 # 
-# current_variables = c("URBAN",
+# current_variables = c("CYEAR", "URBAN",
 # "T1",
 # "BUSINESS_IND",
 # "FARM_IND",
@@ -804,7 +805,7 @@ The following code performs model selection on all three-way interaction effects
 ```{r}
 #three_way_model = as.formula(paste("THOUSANDS ~ ",paste(current_variables, collapse="+"),sep = ""))
 # three_way_model
-three_way_model_formula = as.formula("LOG_THOUSANDS_SHIFTED ~ URBAN + T1 + BUSINESS_IND + FARM_IND + 
+three_way_model_formula = as.formula("LOG_THOUSANDS_SHIFTED ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + 
     FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | 
     HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND * 
     CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + T1_41_IND * 
@@ -833,10 +834,11 @@ HHIDs = unique(df_trimmed$HHID)
 # 80 - 20 test split
 test_size = 5 
 
+initial_MSEs = c()
 our_MSEs = c()
 two_way_MSEs = c()
 three_way_MSEs = c()
-four_way_MSEs = c()
+
 set.seed(0)
 for(i in 1:test_size){
   HHIDs = sample(HHIDs)
@@ -848,24 +850,29 @@ for(i in 1:test_size){
   train_fold = df_trimmed[df_trimmed$HHID %in% train_fold_HHIDs,]
   test_fold = df_trimmed[df_trimmed$HHID %in% test_fold_HHIDs,]
   
-  #create a new model on train_fold
+  initial_model = lmer(m1_formula, REML=FALSE, data=train_fold)
+  predictions = predict(initial_model, test_fold, allow.new.levels=TRUE)
+  residuals = exp(predictions) - exp(test_fold$LOG_THOUSANDS_SHIFTED)
+  MSE = mean(residuals^2)
+  initial_MSEs = c(initial_MSEs, MSE)
+
   our_model = lmer(model_final_formula, REML = FALSE, data = train_fold)
   predictions = predict(our_model, test_fold, allow.new.levels=TRUE)
   residuals = exp(predictions) - exp(test_fold$LOG_THOUSANDS_SHIFTED)
   MSE = mean(residuals^2)
   our_MSEs = c(our_MSEs, MSE)
-  
+
   two_way = lmer(all_two_way_interaction_model_formula, data=train_fold, REML=FALSE)
   predictions = predict(two_way, test_fold, allow.new.levels=TRUE)
   residuals = exp(predictions) - exp(test_fold$LOG_THOUSANDS_SHIFTED)
   MSE = mean(residuals^2)
   two_way_MSEs = c(two_way_MSEs, MSE)
-  
+
   three_way = lmer(three_way_model_formula, data=train_fold, REML=FALSE)
   predictions = predict(three_way, test_fold, allow.new.levels=TRUE)
   residuals = exp(predictions) - exp(test_fold$LOG_THOUSANDS_SHIFTED)
   MSE = mean(residuals^2)
-  three_way_MSEs = c(three_way_MSEs, MSE)  
+  three_way_MSEs = c(three_way_MSEs, MSE)
 }
 ```
 
@@ -931,6 +938,9 @@ for(i in 1:test_size){
 ```
 
 ```{r}
+mean(initial_MSEs)
+sd(initial_MSEs)
+
 mean(our_MSEs)
 sd(our_MSEs)
 
@@ -939,9 +949,6 @@ sd(two_way_MSEs)
 
 mean(three_way_MSEs)
 sd(three_way_MSEs)
-
-mean(four_way_MSEs)
-sd(four_way_MSEs)
 
 mean(no_transform_MSEs)
 sd(no_transform_MSEs)
