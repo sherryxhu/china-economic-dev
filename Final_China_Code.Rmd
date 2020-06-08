@@ -8,7 +8,7 @@ output: html_document
 ```{r library}
 # libraries that need to be installed and loaded
 library(tidyverse)
-library(mice)
+library(dplyr)
 library(reshape2)
 library(ggplot2)
 library(lme4)
@@ -159,6 +159,27 @@ df_trimmed$LOG_THOUSANDS_SHIFTED = log(df_trimmed$THOUSANDS_SHIFTED)
 df$THOUSANDS_SHIFTED =df$THOUSANDS - (min(df$THOUSANDS)-1)
 df$LOG_THOUSANDS_SHIFTED = log(df$THOUSANDS_SHIFTED)
 ```
+
+#Justification for Log Transformation
+```{r}
+og_income <- df_trimmed %>% 
+  dplyr::group_by(WAVE) %>% 
+  dplyr::summarise(og_mean_inc = mean(HHINCPC_CPI))
+ggplot(og_income, aes(x=WAVE, y=og_mean_inc)) +
+  geom_point() +
+  labs(title = "Mean Per Capita Household Income by Year",
+       x = "Year",
+       y = "Yuan")
+
+log_income <- og_income %>% 
+  mutate(log_mean_income = log(og_mean_inc))
+ggplot(log_income, aes(x=WAVE, y=log_mean_income)) +
+  geom_point() +
+  labs(title = "Log Mean Per Capita Household Income by Year",
+       x = "Year",
+       y = "Log(Yuan)")
+```
+
 
 # Initial Model 
 
@@ -1163,10 +1184,10 @@ library(tidyverse)
 #gini index overtime
 gini.years = df %>%
   dplyr::select(HHID,HHINCPC_CPI,WAVE) %>%
-  arrange(HHINCPC_CPI) %>%
+  dplyr::arrange(HHINCPC_CPI) %>%
   transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
-  group_by(WAVE) %>%
-  summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
+  dplyr::group_by(WAVE) %>%
+  dplyr::summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
 
 p1 = ggplot(gini.years,aes(x = factor(WAVE),y = index)) +
   geom_line() +
@@ -1212,14 +1233,14 @@ gini.years.province = df %>%
   dplyr::select(HHID,HHINCPC_CPI,T1,WAVE,city) %>%
   #arrange(HHINCPC_CPI) %>%
   transform(HHINCPC_CPI = ifelse(HHINCPC_CPI < 0, 0, HHINCPC_CPI)) %>%
-  group_by(city,WAVE) %>%
-  summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
+  dplyr::group_by(city,WAVE) %>%
+  dplyr::summarise(index = ineq(HHINCPC_CPI,type = c("Gini")))
 
 p2 = ggplot(gini.years.province,aes(x = factor(WAVE),y = index,group = city,color = city)) +
   geom_line() +
   geom_point()+
   geom_line(data = gini.years,aes(x = factor(WAVE),y = index),color = "black") + 
-  ggtitle("Gini Index Over Year by Province") +
+  ggtitle("5c: Gini Index Over Year by Province") +
   xlab("Year") + ylab("Gini Index") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -1243,13 +1264,13 @@ df =  df %>%
 gini.years.primary = df %>%
   dplyr::select(HHID,primary_income,T1,WAVE,city,PRIMARY) %>%
   transform(primary_income = ifelse(primary_income < 0, 0, primary_income)) %>%
-  group_by(PRIMARY,WAVE) %>%
-  summarise(index = ineq(primary_income,type = c("Gini")))
+  dplyr::group_by(PRIMARY,WAVE) %>%
+  dplyr::summarise(index = ineq(primary_income,type = c("Gini")))
 
 ggplot(gini.years.primary,aes(x = WAVE,y = index,group = PRIMARY,color = PRIMARY)) +
   geom_line()+
   #geom_point()+
-  ggtitle("Gini Index Over Year by Primary Outcome") +
+  ggtitle("5a: Gini Index Over Year by Primary Outcome") +
   xlab("Year") + ylab("Gini Index") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -1269,13 +1290,13 @@ ggplot(gini.years.primary,aes(x = WAVE,y = index)) +
 gini.years.urban = df %>%
   dplyr::select(HHID,primary_income,T1,WAVE,URBAN) %>%
   transform(primary_income = ifelse(primary_income < 0, 0, primary_income)) %>%
-  group_by(URBAN,WAVE) %>%
-  summarise(index = ineq(primary_income,type = c("Gini")))
+  dplyr::group_by(URBAN,WAVE) %>%
+  dplyr::summarise(index = ineq(primary_income,type = c("Gini")))
 
 ggplot(gini.years.urban,aes(x = WAVE,y = index,group = URBAN,color = URBAN)) +
   geom_line()+
   #geom_point()+
-  ggtitle("Gini Index Over Year by Urban/Rural") +
+  ggtitle("5b: Gini Index Over Year by Urban/Rural") +
   xlab("Year") + ylab("Gini Index") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
