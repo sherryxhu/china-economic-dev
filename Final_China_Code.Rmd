@@ -886,18 +886,42 @@ for(i in 1:test_size){
   test_fold = df[df$HHID %in% test_fold_HHIDs,]
   
   #no transformation on response variable
+  SAmodel1 <- lmer(THOUSANDS ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND + FISH_IND +  
+    LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 | HHID) +  
+    CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND * CYEAR +  
+    CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + T1_41_IND * CYEAR +  
+    T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN + CYEAR *  
+    SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR + CYEAR *  
+    LVST_IND + CYEAR * OTHR_IND, data=train_fold, REML=FALSE)
+  
   predictions = predict(SAmodel1, test_fold, allow.new.levels=TRUE)
   residuals = (predictions) - (test_fold$THOUSANDS)
   MSE = mean(residuals^2)
   no_transform_MSEs = c(no_transform_MSEs, MSE)
   
   #square root transformation on response variable
+  SAmodel2 <- lmer(sqrt(THOUSANDS_SHIFTED) ~ CYEAR + URBAN + T1 + BUSINESS_IND +  
+    FARM_IND + FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND +  
+    SUB_IND + (1 | HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR +  
+    T1_32_IND * CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR +  
+    T1_41_IND * CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR +  
+    CYEAR * URBAN + CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND *  
+    CYEAR + CYEAR * LVST_IND + CYEAR * OTHR_IND, data=train_fold, REML=FALSE)
+  
   predictions = predict(SAmodel2, test_fold, allow.new.levels=TRUE)
   residuals = (predictions^2) - (test_fold$THOUSANDS_SHIFTED)
   MSE = mean(residuals^2)
   sqrt_transform_MSEs = c(sqrt_transform_MSEs, MSE)
   
   #squared transformation on response variable
+  SAmodel3 <- lmer((THOUSANDS_SHIFTED)^2 ~ CYEAR + URBAN + T1 + BUSINESS_IND + FARM_IND +  
+    FISH_IND + LVST_IND + OTHR_IND + RETIRE_IND + SUB_IND + (1 |  
+    HHID) + CYEAR * RETIRE_IND + T1_23_IND * CYEAR + T1_32_IND *  
+    CYEAR + CYEAR * BUSINESS_IND + T1_45_IND * CYEAR + T1_41_IND *  
+    CYEAR + T1_43_IND * CYEAR + T1_37_IND * CYEAR + CYEAR * URBAN +  
+    CYEAR * SUB_IND + T1_52_IND * CYEAR + T1_42_IND * CYEAR +  
+    CYEAR * LVST_IND + CYEAR * OTHR_IND, data=train_fold, REML=FALSE)
+  
   predictions = predict(SAmodel3, test_fold, allow.new.levels=TRUE)
   residuals = (sqrt(predictions)) - (test_fold$THOUSANDS)
   MSE = mean(residuals^2)
